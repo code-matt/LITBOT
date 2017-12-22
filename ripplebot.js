@@ -1,0 +1,35 @@
+require('dotenv').config()
+const binance = require('node-binance-api')
+
+class RippleBot {
+  constructor () {
+    this.init = this.init.bind(this)
+
+    binance.options({
+      'APIKEY': process.env.BINANCE_PUBLIC_KEY,
+      'APISECRET': process.env.BINANCE_SECRET_KEY
+    })
+    console.log('Initiating LitBot!')
+    this.init()
+  }
+
+  init () {
+    let XRPUSDT
+    let XRPETH
+    binance.prices((ticker) => {
+      XRPUSDT = ticker.ETHUSDT
+      XRPETH = ticker.XRPETH
+      console.log('Price of Ripple - Ethereum: ', ticker.XRPETH)
+      console.log('Etherium price - USDT: ', ticker.ETHUSDT)
+    })
+    binance.balance((balances) => {
+      let XRPBalance = balances.XRP.available
+      let XRPPrice = XRPUSDT * XRPETH
+      console.log('XRP balance: ', XRPBalance)
+      console.log('XRP (aprox) USD value: ', XRPPrice)
+      console.log('Your XRP (aprox) USD value: ', XRPBalance * XRPPrice)
+    })
+  }
+}
+
+new RippleBot()
