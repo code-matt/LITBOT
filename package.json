@@ -4,6 +4,7 @@
   "description": "Create a .env file with: ``` BINANCE_PUBLIC_KEY=... BINANCE_SECRET_KEY=... ```",
   "main": "litbot.js",
   "dependencies": {
+    "bollinger-bands": "^3.0.1",
     "dotenv": "^4.0.0",
     "node-binance-api": "^0.2.11"
   },

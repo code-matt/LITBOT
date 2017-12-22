@@ -10,26 +10,43 @@ class RippleBot {
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
-    this.init()
+    this.init().then(done => {
+      console.log('done!')
+    })
   }
 
   init () {
-    let XRPUSDT
-    let XRPETH
-    let ETHUSDT
-    binance.prices((ticker) => {
-      ETHUSDT = ticker.ETHUSDT
-      XRPETH = ticker.XRPETH
-      console.log('Price of Ripple - Ethereum: ', XRPETH)
-      console.log('Etherium price - USDT: ', ETHUSDT)
+    return new Promise((resolve, reject) => {
+      let thingsToDo = 2
+      let XRPUSDT, XRPETH, ETHUSDT, XRPPrice, XRPBalance
+
+      binance.prices((ticker) => {
+        ETHUSDT = ticker.ETHUSDT
+        XRPETH = ticker.XRPETH
+        console.log('Price of Ripple - Ethereum: ', XRPETH)
+        console.log('Etherium price - USDT: ', ETHUSDT)
+        thingsToDo -= 1
+        if (!thingsToDo) {
+          resolve(true)
+        }
+      })
+      binance.balance((balances) => {
+        XRPBalance = balances.XRP.available
+        XRPPrice = ETHUSDT * XRPETH
+        XRPUSDT = XRPBalance * XRPPrice
+        console.log('XRP balance: ', XRPBalance)
+        console.log('XRP (aprox) USD value: ', XRPPrice)
+        console.log('Your XRP (aprox) USD value: ', XRPUSDT)
+        thingsToDo -= 1
+        if (!thingsToDo) {
+          resolve(true)
+        }
+      })
     })
-    binance.balance((balances) => {
-      let XRPBalance = balances.XRP.available
-      let XRPPrice = ETHUSDT * XRPETH
-      console.log('XRP balance: ', XRPBalance)
-      console.log('XRP (aprox) USD value: ', XRPPrice)
-      console.log('Your XRP (aprox) USD value: ', XRPBalance * XRPPrice)
-    })
+  }
+
+  bollengerWat () {
+
   }
 }
 
