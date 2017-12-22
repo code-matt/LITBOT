@@ -3,19 +3,23 @@ const binance = require('node-binance-api')
 
 class RippleBot {
   constructor () {
-    this.init = this.init.bind(this)
+    this.displayRippleStats = this.displayRippleStats.bind(this)
+    this.buildBollingerBands = this.buildBollingerBands.bind(this)
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
-    this.init().then(done => {
+    // this.displayRippleStats().then(done => {
+    //   console.log('done!')
+    // })
+    this.buildBollingerBands().then(done => {
       console.log('done!')
     })
   }
 
-  init () {
+  displayRippleStats () {
     return new Promise((resolve, reject) => {
       let thingsToDo = 2
       let XRPUSDT, XRPETH, ETHUSDT, XRPPrice, XRPBalance
@@ -45,8 +49,10 @@ class RippleBot {
     })
   }
 
-  bollengerWat () {
-
+  buildBollingerBands () {
+    return new Promise((resolve, reject) => {
+      resolve(true)
+    })
   }
 }
 
