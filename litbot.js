@@ -16,11 +16,12 @@ class RippleBot {
   init () {
     let XRPUSDT
     let XRPETH
+    let ETHUSDT
     binance.prices((ticker) => {
       XRPUSDT = ticker.ETHUSDT
       XRPETH = ticker.XRPETH
-      console.log('Price of Ripple - Ethereum: ', ticker.XRPETH)
-      console.log('Etherium price - USDT: ', ticker.ETHUSDT)
+      console.log('Price of Ripple - Ethereum: ', XRPETH)
+      console.log('Etherium price - USDT: ', ETHUSDT)
     })
     binance.balance((balances) => {
       let XRPBalance = balances.XRP.available
