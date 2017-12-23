@@ -7,15 +7,24 @@ require('lodash-math')(_)
 
 class RippleBot {
   constructor () {
+    // this line below is a hack to force this node process to stay open until closed.
+    setInterval(() => {}, Number.POSITIVE_INFINITY)
+
     this.calcMyXRPBalanceAndValue = this.calcMyXRPBalanceAndValue.bind(this)
     this.averageDirectionalMovement = this.averageDirectionalMovement.bind(this)
     this.calculateAROON = this.calculateAROON.bind(this)
+    this.fullCalculation = this.fullCalculation.bind(this)
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
+    this.fullCalculation()
+    setInterval(this.fullCalculation, 30000)
+  }
+
+  fullCalculation () {
     this.calcMyXRPBalanceAndValue().then(done => {
       this.calculateAROON().then(done => {
         this.averageDirectionalMovement().then(done => {
@@ -132,7 +141,7 @@ class RippleBot {
           let movingAvgUp = _.movingAvg(_.takeRight(arr2, 20), 20)
           console.log('AROON DOWN MOVING AVERAGE', movingAvgDown[0])
           console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
-          
+
           if (movingAvgDown[0] > movingAvgUp[0]) {
             console.log('Buying is not advised right now. Sell! Sell! Sell!')
           } else {
