@@ -160,9 +160,9 @@ class RippleBot {
           high: high,
           low: low,
           close: close,
-          optInTimePeriod: 9
+          optInTimePeriod: 5
         }, (err, result) => {
-          let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 100), 100)
+          let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 5), 5)
           console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
           // console.log(talib.explain("ADX"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
           // calculation you want to learn about from here: http://ta-lib.org/function.html
@@ -204,14 +204,14 @@ class RippleBot {
           optInNbDevDn: 2,
           optInMAType: 0,
           volume: volume,
-          optInTimePeriod: 9
+          optInTimePeriod: 5
         }, (err, result) => {
           console.log('Moving Average AROON:')
           let arr = result.result.outAroonDown
-          let movingAvgDown = _.movingAvg(_.takeRight(arr, 100), 100)
+          let movingAvgDown = _.movingAvg(_.takeRight(arr, 5), 5)
 
           let arr2 = result.result.outAroonUp
-          let movingAvgUp = _.movingAvg(_.takeRight(arr2, 100), 100)
+          let movingAvgUp = _.movingAvg(_.takeRight(arr2, 5), 5)
           console.log('AROON DOWN MOVING AVERAGE', movingAvgDown[0])
           console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
 
