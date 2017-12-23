@@ -14,24 +14,68 @@ class RippleBot {
     this.averageDirectionalMovement = this.averageDirectionalMovement.bind(this)
     this.calculateAROON = this.calculateAROON.bind(this)
     this.fullCalculation = this.fullCalculation.bind(this)
+    this.buyHoldSellDecision = this.buyHoldSellDecision.bind(this)
+    this.updatePrices = this.updatePrices.bind(this)
+    this.reportProgress = this.reportProgress.bind(this)
+    this.doBuy = this.doBuy.bind(this)
+    this.doSell = this.doSell.bind(this)
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
-    this.fullCalculation()
-    setInterval(this.fullCalculation, 30000)
+    this.fullCalculation(true)
+    setInterval(() => this.fullCalculation(false), 30000)
+
+    this.prices = null
+    this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
+    this._BTC = 0.05 // start with 0.05 BTC
+    this._valueBTC = 15000 // keeping this a constant for now to make things less of a headache.
+                           // for us to see how much money the bot made or lost.
   }
 
   fullCalculation () {
-    this.calcMyXRPBalanceAndValue().then(done => {
-      this.calculateAROON().then(done => {
-        this.averageDirectionalMovement().then(done => {
-          console.log('done!')
+    this.updatePrices().then(done => {
+      this.calculateAROON('5m').then(done => {
+        this.averageDirectionalMovement('5m').then(done => {
+          this.buyHoldSellDecision().then(done => {
+            this.reportProgress()
+          })
         })
       })
     })
+  }
+
+  updatePrices () {
+    return new Promise((resolve, reject) => {
+      binance.prices((ticker) => {
+        this.prices = ticker // this.ticket.XRPETH for example
+        resolve(true)
+      })
+    })
+  }
+
+  buyHoldSellDecision () {
+    return new Promise((resolve, reject) => {
+      resolve(true)
+    })
+  }
+
+  reportProgress () {
+    console.log(`
+      LITBOT PROGRESS REPORT:
+      ....
+      ....
+    `)
+  }
+
+  doBuy (amount) {
+
+  }
+
+  doSell (amount) {
+    
   }
 
   calcMyXRPBalanceAndValue () {
@@ -63,7 +107,7 @@ class RippleBot {
   // This tells us how strong the trend is. Not weather the trend is up or down.
   // http://www.swing-trade-stocks.com/ADX-indicator.html I have read if its 20 or lower,
   // that means its a weak trend. I still don't get how this helps :p
-  averageDirectionalMovement () {
+  averageDirectionalMovement (timePeriod) {
     return new Promise((resolve, reject) => {
       let thingsToDo = 1
       let open = []
@@ -71,7 +115,7 @@ class RippleBot {
       let high = []
       let low = []
       let volume = []
-      binance.candlesticks('XRPETH', '5m', (ticks) => {
+      binance.candlesticks('XRPETH', timePeriod, (ticks) => {
         ticks.forEach(tick => {
           // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
           open.push(Number(tick[1]))
@@ -87,7 +131,7 @@ class RippleBot {
           high: high,
           low: low,
           close: close,
-          optInTimePeriod: 5
+          optInTimePeriod: 9
         }, (err, result) => {
           let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 20), 20)
           console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
@@ -102,7 +146,7 @@ class RippleBot {
     })
   }
 
-  calculateAROON () {
+  calculateAROON (timePeriod) {
     return new Promise((resolve, reject) => {
       let thingsToDo = 1
       let open = []
@@ -110,7 +154,7 @@ class RippleBot {
       let high = []
       let low = []
       let volume = []
-      binance.candlesticks('XRPETH', '5m', (ticks) => {
+      binance.candlesticks('XRPETH', timePeriod, (ticks) => {
         ticks.forEach(tick => {
           // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
           open.push(Number(tick[1]))
@@ -131,7 +175,7 @@ class RippleBot {
           optInNbDevDn: 2,
           optInMAType: 0,
           volume: volume,
-          optInTimePeriod: 5
+          optInTimePeriod: 9
         }, (err, result) => {
           console.log('Moving Average AROON:')
           let arr = result.result.outAroonDown
