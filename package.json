@@ -6,6 +6,7 @@
   "dependencies": {
     "bollinger-bands": "^3.0.1",
     "dotenv": "^4.0.0",
+    "lodash": "^4.17.4",
     "node-binance-api": "^0.2.11",
     "talib": "^1.0.3"
   },
