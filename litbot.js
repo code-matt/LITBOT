@@ -62,6 +62,11 @@ class RippleBot {
 
   buyHoldSellDecision () {
     return new Promise((resolve, reject) => {
+      if (this._BTC) {
+        this.doBuy()
+      } else {
+        this.doSell()
+      }
       resolve(true)
     })
   }
@@ -82,12 +87,28 @@ class RippleBot {
     `)
   }
 
-  doBuy (amount) {
+  doBuy () {
+    console.log(`
 
+      **********************************************
+      LITBOT is buying XRP with 100% of BTC balance
+      **********************************************
+
+    `)
+    this._XRP = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices.XRPBTC)
+    this._BTC = 0
   }
 
-  doSell (amount) {
+  doSell () {
+    console.log(`
 
+      *************************************
+      LITBOT is selling 100% of XRP balance
+      *************************************
+
+    `)
+    this._BTC = (this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)) / this.prices.BTCUSDT
+    this._XRP = 0
   }
 
   calcMyXRPBalanceAndValue () {
