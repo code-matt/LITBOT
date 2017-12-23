@@ -1,4 +1,6 @@
 require('dotenv').config()
+var talib = require('talib')
+console.log("TALib Version: " + talib.version)
 const binance = require('node-binance-api')
 
 class RippleBot {

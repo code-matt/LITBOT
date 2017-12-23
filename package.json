@@ -6,7 +6,8 @@
   "dependencies": {
     "bollinger-bands": "^3.0.1",
     "dotenv": "^4.0.0",
-    "node-binance-api": "^0.2.11"
+    "node-binance-api": "^0.2.11",
+    "talib": "^1.0.3"
   },
   "devDependencies": {},
   "scripts": {
