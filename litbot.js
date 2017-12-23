@@ -31,7 +31,7 @@ class RippleBot {
     this.prices = null
     this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
     this._BTC = 0.05 // start with 0.05 BTC
-    this._valueBTC = 15000 // keeping this a constant for now to make things less of a headache.
+    // this._valueBTC = 15000 // keeping this a constant for now to make things less of a headache.
                            // for us to see how much money the bot made or lost.
 
                            // ^^ later we will want to do this for real and record the actual BTC value
@@ -68,9 +68,17 @@ class RippleBot {
 
   reportProgress () {
     console.log(`
-      LITBOT PROGRESS REPORT:
-      ....
-      ....
+      LITBOT PROGRESS REPORT(Started with 0.05 BTC):
+      Current BTC/USDT Value: ${this.prices.BTCUSDT}
+      Current XRP/BTC Value: ${this.prices.XRPBTC}
+      Aprox USD value of XRP: ${this.prices.BTCUSDT * this.prices.XRPBTC}
+      -------------------------
+      Balances:
+                    XRP: ${this._XRP}
+                    BTC: ${this._BTC}
+      Wallet Value: 
+                    XRP(usd): ${this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)}
+                    BTC(usd): ${this._BTC * this.prices.BTCUSDT}
     `)
   }
 
@@ -137,7 +145,7 @@ class RippleBot {
           close: close,
           optInTimePeriod: 9
         }, (err, result) => {
-          let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 20), 20)
+          let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 100), 100)
           console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
           // console.log(talib.explain("ADX"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
           // calculation you want to learn about from here: http://ta-lib.org/function.html
@@ -183,10 +191,10 @@ class RippleBot {
         }, (err, result) => {
           console.log('Moving Average AROON:')
           let arr = result.result.outAroonDown
-          let movingAvgDown = _.movingAvg(_.takeRight(arr, 20), 20)
+          let movingAvgDown = _.movingAvg(_.takeRight(arr, 100), 100)
 
           let arr2 = result.result.outAroonUp
-          let movingAvgUp = _.movingAvg(_.takeRight(arr2, 20), 20)
+          let movingAvgUp = _.movingAvg(_.takeRight(arr2, 100), 100)
           console.log('AROON DOWN MOVING AVERAGE', movingAvgDown[0])
           console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
 
