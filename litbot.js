@@ -62,7 +62,7 @@ class RippleBot {
       let high = []
       let low = []
       let volume = []
-      binance.candlesticks('XRPBTC', '15m', (ticks) => {
+      binance.candlesticks('XRPETH', '5m', (ticks) => {
         ticks.forEach(tick => {
           // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
           open.push(Number(tick[1]))
@@ -78,7 +78,7 @@ class RippleBot {
           high: high,
           low: low,
           close: close,
-          optInTimePeriod: 15
+          optInTimePeriod: 5
         }, (err, result) => {
           let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 20), 20)
           console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
@@ -101,7 +101,7 @@ class RippleBot {
       let high = []
       let low = []
       let volume = []
-      binance.candlesticks('XRPBTC', '15m', (ticks) => {
+      binance.candlesticks('XRPETH', '5m', (ticks) => {
         ticks.forEach(tick => {
           // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
           open.push(Number(tick[1]))
@@ -122,7 +122,7 @@ class RippleBot {
           optInNbDevDn: 2,
           optInMAType: 0,
           volume: volume,
-          optInTimePeriod: 15
+          optInTimePeriod: 5
         }, (err, result) => {
           console.log('Moving Average AROON:')
           let arr = result.result.outAroonDown
