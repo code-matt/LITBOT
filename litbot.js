@@ -1,18 +1,22 @@
 require('dotenv').config()
 var talib = require('talib')
-console.log("TALib Version: " + talib.version)
+console.log('TALib Version: ' + talib.version)
 const binance = require('node-binance-api')
 
 class RippleBot {
   constructor () {
     this.init = this.init.bind(this)
+    this.averageDirectionalMovement = this.averageDirectionalMovement.bind(this)
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
-    this.init().then(done => {
+    // this.init().then(done => {
+    //   console.log('done!')
+    // })
+    this.averageDirectionalMovement().then(done => {
       console.log('done!')
     })
   }
@@ -43,6 +47,47 @@ class RippleBot {
         if (!thingsToDo) {
           resolve(true)
         }
+      })
+    })
+  }
+  // This tells us how strong the trend is up or down. Not weather the trend is up or down.
+  // http://www.swing-trade-stocks.com/ADX-indicator.html I have read if its 20 or lower,
+  // that means its a weak trend. I still don't get how this helps :p
+  averageDirectionalMovement () {
+    return new Promise((resolve, reject) => {
+      let thingsToDo = 1
+      let open = []
+      let close = []
+      let high = []
+      let low = []
+      let volume = []
+      binance.candlesticks('XRPBTC', '2h', (ticks) => {
+        ticks.forEach(tick => {
+          // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
+          open.push(Number(tick[1]))
+          close.push(Number(tick[4]))
+          high.push(Number(tick[2]))
+          low.push(Number(tick[3]))
+          volume.push(Number(tick[5]))
+        })
+        talib.execute({
+          name: 'ADX',
+          startIdx: 0,
+          endIdx: close.length - 1,
+          high: high,
+          low: low,
+          close: close,
+          optInTimePeriod: 120
+        }, (err, result) => {
+          console.log('ADX Function Results:')
+          console.log(result)
+          // console.log(talib.explain("ADX"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
+          // calculation you want to learn about from here: http://ta-lib.org/function.html
+          thingsToDo -= 1
+          if (!thingsToDo) {
+            resolve(true)
+          }
+        })
       })
     })
   }
