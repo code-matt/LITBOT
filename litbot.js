@@ -33,6 +33,10 @@ class RippleBot {
     this._BTC = 0.05 // start with 0.05 BTC
     this._valueBTC = 15000 // keeping this a constant for now to make things less of a headache.
                            // for us to see how much money the bot made or lost.
+
+                           // ^^ later we will want to do this for real and record the actual BTC value
+                           // when we buy / sell. Maybe taking that into account if there is a serious up
+                           // or down trend in BTC.
   }
 
   fullCalculation () {
@@ -75,7 +79,7 @@ class RippleBot {
   }
 
   doSell (amount) {
-    
+
   }
 
   calcMyXRPBalanceAndValue () {
