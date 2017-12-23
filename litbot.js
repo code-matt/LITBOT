@@ -20,6 +20,8 @@ class RippleBot {
     this.doBuy = this.doBuy.bind(this)
     this.doSell = this.doSell.bind(this)
 
+    this.movement = null
+
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
       'APISECRET': process.env.BINANCE_SECRET_KEY
@@ -35,8 +37,8 @@ class RippleBot {
 
   fullCalculation () {
     this.updatePrices().then(done => {
-      this.calculateAROON('5m').then(done => {
-        this.averageDirectionalMovement('5m').then(done => {
+      this.calculateAROON('1m').then(done => {
+        this.averageDirectionalMovement('1m').then(done => {
           this.buyHoldSellDecision().then(done => {
             this.reportProgress()
           })
@@ -56,9 +58,9 @@ class RippleBot {
 
   buyHoldSellDecision () {
     return new Promise((resolve, reject) => {
-      if (this._BTC) {
+      if (this._BTC && this.movement === 'up') {
         this.doBuy()
-      } else {
+      } else if (this._XRP && this.movement === 'down') {
         this.doSell()
       }
       resolve(true)
@@ -214,8 +216,10 @@ class RippleBot {
           console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
 
           if (movingAvgDown[0] > movingAvgUp[0]) {
+            this.movement = 'down'
             console.log('Buying is not advised right now. Sell! Sell! Sell!')
           } else {
+            this.movement = 'up'
             console.log('Buy! Buy! Buy!')
           }
           // console.log(talib.explain("AROON"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
