@@ -5,6 +5,13 @@ const binance = require('node-binance-api')
 var _ = require('lodash')
 require('lodash-math')(_)
 
+var blessed = require('blessed')
+var contrib = require('blessed-contrib')
+var chalk = require('chalk')
+var screen = blessed.screen()
+
+var scale = require('scale-number-range')
+
 class RippleBot {
   constructor () {
     // this line below is a hack to force this node process to stay open until closed.
@@ -19,6 +26,10 @@ class RippleBot {
     this.reportProgress = this.reportProgress.bind(this)
     this.doBuy = this.doBuy.bind(this)
     this.doSell = this.doSell.bind(this)
+    this.initWSData = this.initWSData.bind(this)
+    this.renderDashboard = this.renderDashboard.bind(this)
+    this.calculatePlusDI = this.calculatePlusDI.bind(this)
+    this.LITBOTLOG = this.LITBOTLOG.bind(this)
 
     this.movement = null
 
@@ -27,12 +38,148 @@ class RippleBot {
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
-    this.fullCalculation(true)
-    setInterval(() => this.fullCalculation(false), 30000)
+    // this.fullCalculation(true)
+    // setInterval(() => this.fullCalculation(false), 30000)
+    this.chunks = []
+    this.symbol = 'XRPBTC'
+    this.prettyName = 'XRP'
+    this.base = 'BTCUSDT'
+    this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
+    this.tree = this.grid.set(6, 6, 6, 6, contrib.tree,
+      { style: { text: 'red' },
+       template: { lines: true },
+       label: 'LITBOT Coins and Strategies'}
+    )
+    this.tree.setData({
+      extended: true,
+      children: {
+        XRPBTC: {
+          extended: true,
+          children: {
+            ADX: {name: 'ADX MODE', test: 'test'}
+          }
+        }
+      }
+    })
+    this.selected = null
+    this.tree.on('select', (node) => {
+      this.selected = node
+    })
+    this.tree.focus()
+    screen.key(['tab'], (ch, key) => {
+      console.log(this.selected.parent.name)
+    })
+    this.updatePrices().then(done => {
+      this.initWSData()
+    })
 
     this.prices = null
     this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
     this._BTC = 0.05 // start with 0.05 BTC
+
+    // contrib
+  }
+
+  initWSData () {
+    var _this = this
+    binance.websockets.chart(['XRPBTC'], '1m', function (symbol, timePeriod, data) {
+      _this.chunks = []
+      for (let i = 0; i < 14; i++) {
+        _this.chunks.push(data[Object.keys(data)[i]])
+        _this.chunks[i].close = Number(_this.chunks[i].close)
+      }
+      _this.averageDirectionalMovement()
+      .then(done => {
+        _this.calculatePlusDI()
+        .then(done => {
+          _this.calculateMinusDI()
+          .then(done => {
+            _this.renderDashboard()
+          })
+        })
+      })
+    })
+  }
+
+  renderDashboard () {
+    var y = _.takeRight(this.chunks.map(chunk => {
+      return Number(chunk.close)
+    }), 11)
+    if (this.ADX) {
+      var data = [
+        {
+          title: 'Closing Price',
+          x: Array.apply(null, {length: 11}).map(Number.call, Number).map(String),
+          y: y
+        },
+        {
+          title: 'ADX',
+          y: this.ADX.map(value => scale(value, _.min(this.ADX), _.max(this.ADX), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
+          style: {
+            line: 'red'
+          }
+        },
+        {
+          title: 'DI +',
+          y: this.PLUSDI.map(value => scale(value, _.min(this.PLUSDI), _.max(this.PLUSDI), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
+          style: {
+            line: 'green'
+          }
+        },
+        {
+          title: 'DI -',
+          y: this.MINUSDI.map(value => scale(value, _.min(this.MINUSDI), _.max(this.MINUSDI), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
+          style: {
+            line: 'blue'
+          }
+        }
+      ]
+    } else {
+      var data = {
+        x: Array.apply(null, {length: 11}).map(Number.call, Number).map(String),
+        y: y
+      }
+    }
+    this.grid.set(6, 0, 6, 6, contrib.line,
+      {
+        style: {
+          line: 'yellow',
+          text: 'green',
+          baseline: 'black'
+        },
+        xLabelPadding: 3,
+        xPadding: 5,
+        label: `${this.symbol} closing price`,
+        minY: _.minBy(this.chunks, 'close').close - 0.00000001,
+        maxY: _.maxBy(this.chunks, 'close').close + 0.00000001,
+        numYLabels: 7,
+        data: data,
+        showLegend: false,
+        legend: {width: 20}
+      }
+    )
+    this.grid.set(0, 0, 6, 6, contrib.markdown,
+      {
+        markdown: this.reportProgress()
+      }
+    )
+    this.grid.set(0, 6, 6, 3, contrib.markdown,
+      {
+        markdown: this.reportDecicionStatus()
+      }
+    )
+
+    this.grid.set(0, 9, 6, 3, contrib.markdown,
+      {
+        markdown: this.LITBOTLOG()
+      }
+    )
+
+    screen.key(['escape', 'q', 'C-c'], function (ch, key) {
+      return process.exit(0)
+    })
+
+    screen.render()
   }
 
   fullCalculation () {
@@ -45,6 +192,14 @@ class RippleBot {
         })
       })
     })
+  }
+
+  LITBOTLOG () {
+    return (`
+      LITBOT is holding...
+      LITBOT is buying...
+      LITBOT is selling...
+    `)
   }
 
   updatePrices () {
@@ -68,7 +223,7 @@ class RippleBot {
   }
 
   reportProgress () {
-    console.log(`
+    return (`
       LITBOT PROGRESS REPORT(Started with 0.05 BTC):
       Current BTC/USDT Value: ${this.prices.BTCUSDT}
       Current XRP/BTC Value: ${this.prices.XRPBTC}
@@ -80,6 +235,14 @@ class RippleBot {
       Wallet Value: 
                     XRP(usd): ${this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)}
                     BTC(usd): ${this._BTC * this.prices.BTCUSDT}
+    `)
+  }
+
+  reportDecicionStatus () {
+    return (`
+      Latest ADX: ${this.ADX[this.ADX.length - 1]}
+      Latest PLUSDI: ${this.PLUSDI[this.PLUSDI.length - 1]}
+      Latest MINUSDI: ${this.MINUSDI[this.MINUSDI.length - 1]}
     `)
   }
 
@@ -136,100 +299,126 @@ class RippleBot {
   // This tells us how strong the trend is. Not weather the trend is up or down.
   // http://www.swing-trade-stocks.com/ADX-indicator.html I have read if its 20 or lower,
   // that means its a weak trend. I still don't get how this helps :p
-  averageDirectionalMovement (timePeriod) {
+  averageDirectionalMovement () {
     return new Promise((resolve, reject) => {
       let thingsToDo = 1
-      let open = []
-      let close = []
-      let high = []
-      let low = []
-      let volume = []
-      binance.candlesticks('XRPETH', timePeriod, (ticks) => {
-        ticks.forEach(tick => {
-          // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
-          open.push(Number(tick[1]))
-          close.push(Number(tick[4]))
-          high.push(Number(tick[2]))
-          low.push(Number(tick[3]))
-          volume.push(Number(tick[5]))
-        })
-        talib.execute({
-          name: 'ADX',
-          startIdx: 0,
-          endIdx: close.length - 1,
-          high: high,
-          low: low,
-          close: close,
-          optInTimePeriod: 5
-        }, (err, result) => {
-          let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 5), 5)
-          console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
-          // console.log(talib.explain("ADX"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
-          // calculation you want to learn about from here: http://ta-lib.org/function.html
-          thingsToDo -= 1
-          if (!thingsToDo) {
-            resolve(true)
-          }
-        })
+      talib.execute({
+        name: 'ADX',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 2
+      }, (err, result) => {
+        // let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 2), 2)
+        // console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
+        // console.log(talib.explain("ADX"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
+        // calculation you want to learn about from here: http://ta-lib.org/function.html
+        this.ADX = result.result.outReal
+        // console.log(this.ADX)
+        // console.log(err)
+        thingsToDo -= 1
+        if (!thingsToDo) {
+          resolve(true)
+        }
       })
     })
   }
 
-  calculateAROON (timePeriod) {
+  calculatePlusDI () {
     return new Promise((resolve, reject) => {
       let thingsToDo = 1
-      let open = []
-      let close = []
-      let high = []
-      let low = []
-      let volume = []
-      binance.candlesticks('XRPETH', timePeriod, (ticks) => {
-        ticks.forEach(tick => {
-          // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
-          open.push(Number(tick[1]))
-          close.push(Number(tick[4]))
-          high.push(Number(tick[2]))
-          low.push(Number(tick[3]))
-          volume.push(Number(tick[5]))
-        })
-        talib.execute({
-          name: 'AROON',
-          startIdx: 0,
-          endIdx: close.length - 1,
-          inReal: close,
-          high: high,
-          low: low,
-          close: close,
-          optInNbDevUp: 2,
-          optInNbDevDn: 2,
-          optInMAType: 0,
-          volume: volume,
-          optInTimePeriod: 5
-        }, (err, result) => {
-          console.log('Moving Average AROON:')
-          let arr = result.result.outAroonDown
-          let movingAvgDown = _.movingAvg(_.takeRight(arr, 5), 5)
-
-          let arr2 = result.result.outAroonUp
-          let movingAvgUp = _.movingAvg(_.takeRight(arr2, 5), 5)
-          console.log('AROON DOWN MOVING AVERAGE', movingAvgDown[0])
-          console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
-
-          if (movingAvgDown[0] > movingAvgUp[0]) {
-            this.movement = 'down'
-            console.log('Buying is not advised right now. Sell! Sell! Sell!')
-          } else {
-            this.movement = 'up'
-            console.log('Buy! Buy! Buy!')
-          }
-          // console.log(talib.explain("AROON"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
-          // calculation you want to learn about from here: http://ta-lib.org/function.html
-          thingsToDo -= 1
-          if (!thingsToDo) {
-            resolve(true)
-          }
-        })
+      talib.execute({
+        name: 'PLUS_DI',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 2
+      }, (err, result) => {
+        this.PLUSDI = result.result.outReal
+        // console.log(result)
+        resolve(true)
       })
+    })
+  }
+
+  calculateMinusDI () {
+    return new Promise((resolve, reject) => {
+      let thingsToDo = 1
+      talib.execute({
+        name: 'MINUS_DI',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 2
+      }, (err, result) => {
+        this.MINUSDI = result.result.outReal
+        resolve(true)
+      })
+    })
+  }
+
+  // TODO: Convert this to websockets / graph
+  calculateAROON (timePeriod) {
+    return new Promise((resolve, reject) => {
+      // let thingsToDo = 1
+      // let open = []
+      // let close = []
+      // let high = []
+      // let low = []
+      // let volume = []
+      // binance.candlesticks('XRPETH', timePeriod, (ticks) => {
+      //   ticks.forEach(tick => {
+      //     // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
+      //     open.push(Number(tick[1]))
+      //     close.push(Number(tick[4]))
+      //     high.push(Number(tick[2]))
+      //     low.push(Number(tick[3]))
+      //     volume.push(Number(tick[5]))
+      //   })
+      //   talib.execute({
+      //     name: 'AROON',
+      //     startIdx: 0,
+      //     endIdx: close.length - 1,
+      //     inReal: close,
+      //     high: high,
+      //     low: low,
+      //     close: close,
+      //     // optInNbDevUp: 2,
+      //     // optInNbDevDn: 2,
+      //     // optInMAType: 0,
+      //     volume: volume,
+      //     optInTimePeriod: 3
+      //   }, (err, result) => {
+      //     console.log('Moving Average AROON:')
+      //     let arr = result.result.outAroonDown
+      //     let movingAvgDown = _.movingAvg(_.takeRight(arr, 10), 10)
+
+      //     let arr2 = result.result.outAroonUp
+      //     let movingAvgUp = _.movingAvg(_.takeRight(arr2, 10), 10)
+      //     console.log('AROON DOWN MOVING AVERAGE', movingAvgDown[0])
+      //     console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
+
+      //     if (movingAvgDown[0] > movingAvgUp[0]) {
+      //       this.movement = 'down'
+      //       console.log('Buying is not advised right now. Sell! Sell! Sell!')
+      //     } else {
+      //       this.movement = 'up'
+      //       console.log('Buy! Buy! Buy!')
+      //     }
+      //     // console.log(talib.explain("AROON"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
+      //     // calculation you want to learn about from here: http://ta-lib.org/function.html
+      //     thingsToDo -= 1
+      //     if (!thingsToDo) {
+      //       resolve(true)
+      //     }
+      //   })
+      // })
     })
   }
 }
