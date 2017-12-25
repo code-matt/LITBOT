@@ -20,7 +20,6 @@ class RippleBot {
     this.calcMyXRPBalanceAndValue = this.calcMyXRPBalanceAndValue.bind(this)
     this.averageDirectionalMovement = this.averageDirectionalMovement.bind(this)
     this.calculateAROON = this.calculateAROON.bind(this)
-    this.fullCalculation = this.fullCalculation.bind(this)
     this.buyHoldSellDecision = this.buyHoldSellDecision.bind(this)
     this.updatePrices = this.updatePrices.bind(this)
     this.reportProgress = this.reportProgress.bind(this)
@@ -28,12 +27,15 @@ class RippleBot {
     this.doSell = this.doSell.bind(this)
     this.initWSData = this.initWSData.bind(this)
     this.renderDashboard = this.renderDashboard.bind(this)
-    this.calculatePlusDI = this.calculatePlusDI.bind(this)
+    this.calculateDI = this.calculateDI.bind(this)
     this.LITBOTLOG = this.LITBOTLOG.bind(this)
     this.calculateAndDraw = this.calculateAndDraw.bind(this)
 
     this.AROONDOWN
     this.AROONUP
+    this.AROON_OCCILATION
+    this.ADX
+    this.DI_OCCILATION
 
     this.movement = null
 
@@ -42,8 +44,7 @@ class RippleBot {
       'APISECRET': process.env.BINANCE_SECRET_KEY
     })
     console.log('Initiating LitBot!')
-    // this.fullCalculation(true)
-    // setInterval(() => this.fullCalculation(false), 30000)
+
     this.chunks = []
     this.symbol = 'XRPBTC'
     this.prettyName = 'XRP'
@@ -81,8 +82,6 @@ class RippleBot {
     this.prices = null
     this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
     this._BTC = 0.05 // start with 0.05 BTC
-
-    // contrib
   }
 
   initWSData () {
@@ -98,13 +97,10 @@ class RippleBot {
   }
 
   calculateAndDraw () {
-    this.averageDirectionalMovement()
-    .then(done => {
-      this.calculatePlusDI()
-      .then(done => {
-        this.calculateMinusDI()
-        .then(done => {
-          this.calculateAROON().then(done => {
+    this.averageDirectionalMovement().then(done => {
+      this.calculateDI().then(done => {
+        this.calculateAROON().then(done => {
+          this.buyHoldSellDecision().then(done => {
             this.renderDashboard()
           })
         })
@@ -153,13 +149,8 @@ class RippleBot {
     }
 
     let aroonData = [
-      // {
-      //   x: ['0', '50', '100'],
-      //   y: [0]
-      // },
       {
         title: 'AROON DOWN',
-        // y: this.AROONDOWN.map(value => scale(value, _.min(this.AROONDOWN), _.max(this.AROONDOWN), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
         x: Array.apply(null, {length: this.AROONDOWN.length}).map(Number.call, Number).map(String),
         y: this.AROONDOWN,
         style: {
@@ -168,7 +159,6 @@ class RippleBot {
       },
       {
         title: 'AROON UP',
-        // y: this.AROONDOWN.map(value => scale(value, _.min(this.AROONDOWN), _.max(this.AROONDOWN), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
         x: Array.apply(null, {length: this.AROONUP.length}).map(Number.call, Number).map(String),
         y: this.AROONUP,
         style: {
@@ -267,18 +257,6 @@ class RippleBot {
     screen.render()
   }
 
-  fullCalculation () {
-    this.updatePrices().then(done => {
-      this.calculateAROON('1m').then(done => {
-        this.averageDirectionalMovement('1m').then(done => {
-          this.buyHoldSellDecision().then(done => {
-            this.reportProgress()
-          })
-        })
-      })
-    })
-  }
-
   LITBOTLOG () {
     return (`
       LITBOT is holding...
@@ -289,24 +267,134 @@ class RippleBot {
 
   updatePrices (initial) {
     return new Promise((resolve, reject) => {
-      binance.prices((ticker) => {
-        this.prices = ticker // this.ticket.XRPETH for example
-        if (!initial) {
-          this.calculateAndDraw()
-        }
-        resolve(true)
-      })
+      try {
+        binance.prices((ticker) => {
+          this.prices = ticker // this.ticket.XRPETH for example
+          if (!initial) {
+            this.calculateAndDraw()
+          }
+          resolve(true)
+        })
+      } catch (err) {
+        console.log('GET PRICES HAS AN ERROR')
+      }
     })
   }
 
   buyHoldSellDecision () {
     return new Promise((resolve, reject) => {
-      if (this._BTC && this.movement === 'up') {
-        this.doBuy()
-      } else if (this._XRP && this.movement === 'down') {
-        this.doSell()
+      if (this.AROON_OCCILATION > 20 && this.DI_OCCILATION > 20 && this.ADX[this.ADX.length - 1] > 30) {
+        if (this._BTC) {
+          this.doBuy()
+        }
+      } else {
+        if (this._XRP) {
+          this.doSell()
+        }
       }
       resolve(true)
+    })
+  }
+
+  doBuy () {
+    // console.log(`
+
+    //   **********************************************
+    //   LITBOT is buying XRP with 100% of BTC balance
+    //   **********************************************
+
+    // `)
+    this._XRP = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices.XRPBTC)
+    this._BTC = 0
+  }
+
+  doSell () {
+    // console.log(`
+
+    //   *************************************
+    //   LITBOT is selling 100% of XRP balance
+    //   *************************************
+
+    // `)
+    this._BTC = (this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)) / this.prices.BTCUSDT
+    this._XRP = 0
+  }
+
+  // This tells us how strong the trend is. Not weather the trend is up or down.
+  // http://www.swing-trade-stocks.com/ADX-indicator.html I have read if its 20 or lower,
+  // that means its a weak trend. I still don't get how this helps :p
+  averageDirectionalMovement () {
+    return new Promise((resolve, reject) => {
+      talib.execute({
+        name: 'ADX',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 9
+      }, (err, result) => {
+        this.ADX = result.result.outReal
+        resolve(true)
+      })
+    })
+  }
+
+  calculateDI () {
+    return new Promise((resolve, reject) => {
+      let thingsToDo = 2
+      talib.execute({
+        name: 'MINUS_DI',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 9
+      }, (err, result) => {
+        thingsToDo -= 1
+        this.MINUSDI = result.result.outReal
+        if (!thingsToDo) {
+          this.DI_OCCILATION = this.PLUSDI[this.PLUSDI.length - 1] - this.MINUSDI[this.MINUSDI.length - 1]
+          resolve(true)
+        }
+      })
+      talib.execute({
+        name: 'PLUS_DI',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 9
+      }, (err, result) => {
+        thingsToDo -= 1
+        this.PLUSDI = result.result.outReal
+        if (!thingsToDo) {
+          this.DI_OCCILATION = this.PLUSDI[this.PLUSDI.length - 1] - this.MINUSDI[this.MINUSDI.length - 1]
+          resolve(true)
+        }
+      })
+    })
+  }
+
+  // TODO: Convert this to websockets / graph
+  calculateAROON (timePeriod) {
+    return new Promise((resolve, reject) => {
+      talib.execute({
+        name: 'AROON',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 9
+      }, (err, result) => {
+        this.AROONDOWN = result.result.outAroonDown
+        this.AROONUP = result.result.outAroonUp
+        this.AROON_OCCILATION = this.AROONUP[this.AROONUP.length - 1] - this.AROONDOWN[this.AROONDOWN.length - 1]
+        resolve(true)
+      })
     })
   }
 
@@ -334,31 +422,10 @@ class RippleBot {
 
       Latest AROONUP: ${this.AROONUP[this.AROONUP.length - 1]}
       Latest AROONDOWN: ${this.AROONDOWN[this.AROONDOWN.length - 1]}
+
+      DI OCCILATION: ${this.DI_OCCILATION}
+      AROON OCCILATION: ${this.AROON_OCCILATION}
     `)
-  }
-
-  doBuy () {
-    console.log(`
-
-      **********************************************
-      LITBOT is buying XRP with 100% of BTC balance
-      **********************************************
-
-    `)
-    this._XRP = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices.XRPBTC)
-    this._BTC = 0
-  }
-
-  doSell () {
-    console.log(`
-
-      *************************************
-      LITBOT is selling 100% of XRP balance
-      *************************************
-
-    `)
-    this._BTC = (this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)) / this.prices.BTCUSDT
-    this._XRP = 0
   }
 
   calcMyXRPBalanceAndValue () {
@@ -386,147 +453,6 @@ class RippleBot {
         })
       })
     })
-  }
-  // This tells us how strong the trend is. Not weather the trend is up or down.
-  // http://www.swing-trade-stocks.com/ADX-indicator.html I have read if its 20 or lower,
-  // that means its a weak trend. I still don't get how this helps :p
-  averageDirectionalMovement () {
-    return new Promise((resolve, reject) => {
-      let thingsToDo = 1
-      talib.execute({
-        name: 'ADX',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        // let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 2), 2)
-        // console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
-        // console.log(talib.explain("ADX"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
-        // calculation you want to learn about from here: http://ta-lib.org/function.html
-        this.ADX = result.result.outReal
-        // console.log(this.ADX)
-        // console.log(err)
-        thingsToDo -= 1
-        if (!thingsToDo) {
-          resolve(true)
-        }
-      })
-    })
-  }
-
-  calculatePlusDI () {
-    return new Promise((resolve, reject) => {
-      let thingsToDo = 1
-      talib.execute({
-        name: 'PLUS_DI',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        this.PLUSDI = result.result.outReal
-        // console.log(result)
-        resolve(true)
-      })
-    })
-  }
-
-  calculateMinusDI () {
-    return new Promise((resolve, reject) => {
-      let thingsToDo = 1
-      talib.execute({
-        name: 'MINUS_DI',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        this.MINUSDI = result.result.outReal
-        resolve(true)
-      })
-    })
-  }
-
-  // TODO: Convert this to websockets / graph
-  calculateAROON (timePeriod) {
-    return new Promise((resolve, reject) => {
-      let thingsToDo = 1
-      talib.execute({
-        name: 'AROON',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        this.AROONDOWN = result.result.outAroonDown
-        this.AROONUP = result.result.outAroonUp
-        resolve(true)
-      })
-    })
-    // return new Promise((resolve, reject) => {
-      // let thingsToDo = 1
-      // let open = []
-      // let close = []
-      // let high = []
-      // let low = []
-      // let volume = []
-      // binance.candlesticks('XRPETH', timePeriod, (ticks) => {
-      //   ticks.forEach(tick => {
-      //     // [time, open, high, low, close, volume, closeTime, assetVolume, trades, buyBaseVolume, buyAssetVolume, ignored]
-      //     open.push(Number(tick[1]))
-      //     close.push(Number(tick[4]))
-      //     high.push(Number(tick[2]))
-      //     low.push(Number(tick[3]))
-      //     volume.push(Number(tick[5]))
-      //   })
-      //   talib.execute({
-      //     name: 'AROON',
-      //     startIdx: 0,
-      //     endIdx: close.length - 1,
-      //     inReal: close,
-      //     high: high,
-      //     low: low,
-      //     close: close,
-      //     // optInNbDevUp: 2,
-      //     // optInNbDevDn: 2,
-      //     // optInMAType: 0,
-      //     volume: volume,
-      //     optInTimePeriod: 3
-      //   }, (err, result) => {
-      //     console.log('Moving Average AROON:')
-      //     let arr = result.result.outAroonDown
-      //     let movingAvgDown = _.movingAvg(_.takeRight(arr, 10), 10)
-
-      //     let arr2 = result.result.outAroonUp
-      //     let movingAvgUp = _.movingAvg(_.takeRight(arr2, 10), 10)
-      //     console.log('AROON DOWN MOVING AVERAGE', movingAvgDown[0])
-      //     console.log('AROON UP MOVING AVERAGE', movingAvgUp[0])
-
-      //     if (movingAvgDown[0] > movingAvgUp[0]) {
-      //       this.movement = 'down'
-      //       console.log('Buying is not advised right now. Sell! Sell! Sell!')
-      //     } else {
-      //       this.movement = 'up'
-      //       console.log('Buy! Buy! Buy!')
-      //     }
-      //     // console.log(talib.explain("AROON"), { depth:3 }) // <-- SUPER HELPFUL.. kinda. Change the .explain to whatever
-      //     // calculation you want to learn about from here: http://ta-lib.org/function.html
-      //     thingsToDo -= 1
-      //     if (!thingsToDo) {
-      //       resolve(true)
-      //     }
-      //   })
-      // })
-    // })
   }
 }
 
