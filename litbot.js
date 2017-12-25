@@ -30,6 +30,10 @@ class RippleBot {
     this.renderDashboard = this.renderDashboard.bind(this)
     this.calculatePlusDI = this.calculatePlusDI.bind(this)
     this.LITBOTLOG = this.LITBOTLOG.bind(this)
+    this.calculateAndDraw = this.calculateAndDraw.bind(this)
+
+    this.AROONDOWN
+    this.AROONUP
 
     this.movement = null
 
@@ -45,7 +49,7 @@ class RippleBot {
     this.prettyName = 'XRP'
     this.base = 'BTCUSDT'
     this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
-    this.tree = this.grid.set(6, 6, 6, 6, contrib.tree,
+    this.tree = this.grid.set(6, 11, 6, 1, contrib.tree,
       { style: { text: 'red' },
        template: { lines: true },
        label: 'LITBOT Coins and Strategies'}
@@ -69,9 +73,10 @@ class RippleBot {
     screen.key(['tab'], (ch, key) => {
       console.log(this.selected.parent.name)
     })
-    this.updatePrices().then(done => {
+    this.updatePrices(true).then(done => {
       this.initWSData()
     })
+    setInterval(this.updatePrices, 5000)
 
     this.prices = null
     this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
@@ -84,17 +89,23 @@ class RippleBot {
     var _this = this
     binance.websockets.chart(['XRPBTC'], '1m', function (symbol, timePeriod, data) {
       _this.chunks = []
-      for (let i = 0; i < 14; i++) {
+      for (let i = 0; i < 60; i++) {
         _this.chunks.push(data[Object.keys(data)[i]])
         _this.chunks[i].close = Number(_this.chunks[i].close)
       }
-      _this.averageDirectionalMovement()
+      _this.calculateAndDraw()
+    })
+  }
+
+  calculateAndDraw () {
+    this.averageDirectionalMovement()
+    .then(done => {
+      this.calculatePlusDI()
       .then(done => {
-        _this.calculatePlusDI()
+        this.calculateMinusDI()
         .then(done => {
-          _this.calculateMinusDI()
-          .then(done => {
-            _this.renderDashboard()
+          this.calculateAROON().then(done => {
+            this.renderDashboard()
           })
         })
       })
@@ -104,12 +115,12 @@ class RippleBot {
   renderDashboard () {
     var y = _.takeRight(this.chunks.map(chunk => {
       return Number(chunk.close)
-    }), 11)
+    }), this.ADX.length)
     if (this.ADX) {
       var data = [
         {
           title: 'Closing Price',
-          x: Array.apply(null, {length: 11}).map(Number.call, Number).map(String),
+          x: Array.apply(null, {length: this.ADX.length}).map(Number.call, Number).map(String),
           y: y
         },
         {
@@ -140,6 +151,31 @@ class RippleBot {
         y: y
       }
     }
+
+    let aroonData = [
+      // {
+      //   x: ['0', '50', '100'],
+      //   y: [0]
+      // },
+      {
+        title: 'AROON DOWN',
+        // y: this.AROONDOWN.map(value => scale(value, _.min(this.AROONDOWN), _.max(this.AROONDOWN), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
+        x: Array.apply(null, {length: this.AROONDOWN.length}).map(Number.call, Number).map(String),
+        y: this.AROONDOWN,
+        style: {
+          line: 'red'
+        }
+      },
+      {
+        title: 'AROON UP',
+        // y: this.AROONDOWN.map(value => scale(value, _.min(this.AROONDOWN), _.max(this.AROONDOWN), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
+        x: Array.apply(null, {length: this.AROONUP.length}).map(Number.call, Number).map(String),
+        y: this.AROONUP,
+        style: {
+          line: 'green'
+        }
+      }
+    ]
     this.grid.set(6, 0, 6, 6, contrib.line,
       {
         style: {
@@ -147,6 +183,7 @@ class RippleBot {
           text: 'green',
           baseline: 'black'
         },
+        yLength: 10,
         xLabelPadding: 3,
         xPadding: 5,
         label: `${this.symbol} closing price`,
@@ -158,7 +195,55 @@ class RippleBot {
         legend: {width: 20}
       }
     )
-    this.grid.set(0, 0, 6, 6, contrib.markdown,
+    this.grid.set(6, 6, 6, 5, contrib.line,
+      {
+        style: {
+          line: 'yellow',
+          text: 'green',
+          baseline: 'black'
+        },
+        yLength: 0,
+        xLabelPadding: 3,
+        xPadding: 5,
+        label: `${this.symbol} AROON`,
+        minY: -2,
+        maxY: 102,
+        numYLabels: 7,
+        data: aroonData,
+        showLegend: false,
+        legend: {width: 20}
+      }
+    )
+    this.grid.set(0, 4, 6, 2, contrib.line,
+      {
+        style: {
+          line: 'yellow',
+          text: 'green',
+          baseline: 'black'
+        },
+        yLength: 0,
+        yLabelPadding: -30,
+        xLabelPadding: 0,
+        xPadding: 0,
+        label: `LITBOT EARNINGS/LOSSES`,
+        minY: -0.2,
+        maxY: 0.2,
+        numYLabels: 4,
+        data: [
+          {
+            x: Array.apply(null, {length: 5}).map(Number.call, Number).map(String),
+            y: [0.002, -0.05, 0.04, 0.02, 0.04]
+          },
+          {
+            y: [0, 0, 0, 0, 0],
+            style: {
+              line: 'red'
+            }
+          }
+        ]
+      }
+    )
+    this.grid.set(0, 0, 6, 4, contrib.markdown,
       {
         markdown: this.reportProgress()
       }
@@ -202,10 +287,13 @@ class RippleBot {
     `)
   }
 
-  updatePrices () {
+  updatePrices (initial) {
     return new Promise((resolve, reject) => {
       binance.prices((ticker) => {
         this.prices = ticker // this.ticket.XRPETH for example
+        if (!initial) {
+          this.calculateAndDraw()
+        }
         resolve(true)
       })
     })
@@ -243,6 +331,9 @@ class RippleBot {
       Latest ADX: ${this.ADX[this.ADX.length - 1]}
       Latest PLUSDI: ${this.PLUSDI[this.PLUSDI.length - 1]}
       Latest MINUSDI: ${this.MINUSDI[this.MINUSDI.length - 1]}
+
+      Latest AROONUP: ${this.AROONUP[this.AROONUP.length - 1]}
+      Latest AROONDOWN: ${this.AROONDOWN[this.AROONDOWN.length - 1]}
     `)
   }
 
@@ -309,7 +400,7 @@ class RippleBot {
         high: this.chunks.map(chunk => Number(chunk.high)),
         low: this.chunks.map(chunk => Number(chunk.low)),
         close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 2
+        optInTimePeriod: 9
       }, (err, result) => {
         // let avgTrendStregnth = _.movingAvg(_.takeRight(result.result.outReal, 2), 2)
         // console.log('The stregnth of the current trend is:', avgTrendStregnth[0])
@@ -336,7 +427,7 @@ class RippleBot {
         high: this.chunks.map(chunk => Number(chunk.high)),
         low: this.chunks.map(chunk => Number(chunk.low)),
         close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 2
+        optInTimePeriod: 9
       }, (err, result) => {
         this.PLUSDI = result.result.outReal
         // console.log(result)
@@ -355,7 +446,7 @@ class RippleBot {
         high: this.chunks.map(chunk => Number(chunk.high)),
         low: this.chunks.map(chunk => Number(chunk.low)),
         close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 2
+        optInTimePeriod: 9
       }, (err, result) => {
         this.MINUSDI = result.result.outReal
         resolve(true)
@@ -366,6 +457,22 @@ class RippleBot {
   // TODO: Convert this to websockets / graph
   calculateAROON (timePeriod) {
     return new Promise((resolve, reject) => {
+      let thingsToDo = 1
+      talib.execute({
+        name: 'AROON',
+        startIdx: 0,
+        endIdx: this.chunks.length - 1,
+        high: this.chunks.map(chunk => Number(chunk.high)),
+        low: this.chunks.map(chunk => Number(chunk.low)),
+        close: this.chunks.map(chunk => Number(chunk.close)),
+        optInTimePeriod: 9
+      }, (err, result) => {
+        this.AROONDOWN = result.result.outAroonDown
+        this.AROONUP = result.result.outAroonUp
+        resolve(true)
+      })
+    })
+    // return new Promise((resolve, reject) => {
       // let thingsToDo = 1
       // let open = []
       // let close = []
@@ -419,7 +526,7 @@ class RippleBot {
       //     }
       //   })
       // })
-    })
+    // })
   }
 }
 
