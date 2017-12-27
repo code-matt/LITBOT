@@ -3,10 +3,10 @@ var talib = require('talib')
 console.log('TALib Version: ' + talib.version)
 const binance = require('node-binance-api')
 var _ = require('lodash')
-require('lodash-math')(_)
+require('./modified_modules/lodash-math')(_)
 
 var blessed = require('blessed')
-var contrib = require('blessed-contrib')
+var contrib = require('./modified_modules/blessed-contrib')
 var chalk = require('chalk')
 var screen = blessed.screen()
 
