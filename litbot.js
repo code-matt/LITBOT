@@ -25,11 +25,12 @@ class RippleBot {
     this.reportProgress = this.reportProgress.bind(this)
     this.doBuy = this.doBuy.bind(this)
     this.doSell = this.doSell.bind(this)
-    this.initWSData = this.initWSData.bind(this)
+    // this.initWSData = this.initWSData.bind(this)
     this.renderDashboard = this.renderDashboard.bind(this)
     this.calculateDI = this.calculateDI.bind(this)
     this.LITBOTLOG = this.LITBOTLOG.bind(this)
     this.calculateAndDraw = this.calculateAndDraw.bind(this)
+    this.updateCandleSticks = this.updateCandleSticks.bind(this)
 
     this.AROONDOWN
     this.AROONUP
@@ -38,6 +39,8 @@ class RippleBot {
     this.DI_OCCILATION
 
     this.movement = null
+
+    this.litbotLog = ['this is a test', '#this is another test']
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
@@ -75,25 +78,15 @@ class RippleBot {
       console.log(this.selected.parent.name)
     })
     this.updatePrices(true).then(done => {
-      this.initWSData()
+
     })
+    this.updateCandleSticks()
+    setInterval(this.updateCandleSticks, 15000)
     setInterval(this.updatePrices, 5000)
 
     this.prices = null
     this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
     this._BTC = 0.05 // start with 0.05 BTC
-  }
-
-  initWSData () {
-    var _this = this
-    binance.websockets.chart(['XRPBTC'], '1m', function (symbol, timePeriod, data) {
-      _this.chunks = []
-      for (let i = 0; i < 60; i++) {
-        _this.chunks.push(data[Object.keys(data)[i]])
-        _this.chunks[i].close = Number(_this.chunks[i].close)
-      }
-      _this.calculateAndDraw()
-    })
   }
 
   calculateAndDraw () {
@@ -278,6 +271,22 @@ class RippleBot {
       } catch (err) {
         console.log('GET PRICES HAS AN ERROR')
       }
+    })
+  }
+
+  updateCandleSticks () {
+    var _this = this
+    binance.candlesticks('XRPBTC', '15m', (ticks, symbol) => {
+      _this.chunks = []
+      ticks.forEach(tick => {
+        _this.chunks.push({
+          open: Number(tick[1]),
+          close: Number(tick[4]),
+          high: Number(tick[2]),
+          low: Number(tick[3])
+        })
+      })
+      this.calculateAndDraw()
     })
   }
 
