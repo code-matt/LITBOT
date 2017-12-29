@@ -30,7 +30,7 @@ class RippleBot {
     this.addPriceToPool = this.addPriceToPool.bind(this)
     this.recalculateMarks = this.recalculateMarks.bind(this)
     this.calculateEMA = this.calculateEMA.bind(this)
-
+    this.calculateROC = this.calculateROC.bind(this)
     this.renderLoading = this.renderLoading.bind(this)
 
     this.AROONDOWN = 0
@@ -101,7 +101,10 @@ class RippleBot {
       if (this.litbotLoading) {
         this.renderLoading()
       } else {
-        this.renderDashboard()
+        this.buyHoldSellDecision().then(done => {
+          this.calculateROC()
+          this.renderDashboard()
+        })
       }
     })
   }
@@ -297,9 +300,22 @@ class RippleBot {
     this.calculateAndDraw()
   }
 
+  calculateROC () {
+    let changes = []
+    this.marks.forEach((mark, index) => {
+      if (index < 6 && index !== 0) {
+        let time = (index + 1) * 15
+        let prevTime = (index) * 15
+        changes.push(100000000 / ((time - prevTime) / (mark - this.marks[index - 1])))
+      }
+    })
+    this.changes = changes
+    this.averageROC = (this.changes.reduce((a, b) => a + b, 0) / this.changes.length).toFixed(3)
+  }
+
   buyHoldSellDecision () {
     return new Promise((resolve, reject) => {
-      if (this.AROON_OCCILATION > 20 && this.DI_OCCILATION > 10 && this.ADX[this.ADX.length - 1] > 16) {
+      if (this.averageROC >= 0.1) {
         if (this._BTC) {
           this.doBuy()
         }
@@ -356,15 +372,7 @@ class RippleBot {
 
   reportDecicionStatus () {
     return (`
-      Latest ADX: ${this.ADX[this.ADX.length - 1]}
-      Latest PLUSDI: ${this.PLUSDI[this.PLUSDI.length - 1]}
-      Latest MINUSDI: ${this.MINUSDI[this.MINUSDI.length - 1]}
-
-      Latest AROONUP: ${this.AROONUP[this.AROONUP.length - 1]}
-      Latest AROONDOWN: ${this.AROONDOWN[this.AROONDOWN.length - 1]}
-
-      DI OCCILATION: ${this.DI_OCCILATION}
-      AROON OCCILATION: ${this.AROON_OCCILATION}
+      AVERAGE ROC 1m15s: ${this.averageROC}
     `)
   }
 

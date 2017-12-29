@@ -9,7 +9,10 @@
       "type": "node",
       "request": "launch",
       "name": "Launch Program",
-      "program": "${file}"
+      "program": "${file}",
+      "console": "externalTerminal",
+      "sourceMaps": false,
+      "program": "${workspaceRoot}/litbot.js"
     }
   ]
 }
