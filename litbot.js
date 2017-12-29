@@ -19,22 +19,19 @@ class RippleBot {
     setInterval(() => {}, Number.POSITIVE_INFINITY)
 
     this.calcMyXRPBalanceAndValue = this.calcMyXRPBalanceAndValue.bind(this)
-    this.averageDirectionalMovement = this.averageDirectionalMovement.bind(this)
-    this.calculateAROON = this.calculateAROON.bind(this)
     this.buyHoldSellDecision = this.buyHoldSellDecision.bind(this)
     this.updatePrices = this.updatePrices.bind(this)
     this.reportProgress = this.reportProgress.bind(this)
     this.doBuy = this.doBuy.bind(this)
     this.doSell = this.doSell.bind(this)
-    // this.initWSData = this.initWSData.bind(this)
     this.renderDashboard = this.renderDashboard.bind(this)
-    this.calculateDI = this.calculateDI.bind(this)
     this.LITBOTLOG = this.LITBOTLOG.bind(this)
     this.calculateAndDraw = this.calculateAndDraw.bind(this)
-    this.updateCandleSticks = this.updateCandleSticks.bind(this)
     this.addPriceToPool = this.addPriceToPool.bind(this)
     this.recalculateMarks = this.recalculateMarks.bind(this)
     this.calculateEMA = this.calculateEMA.bind(this)
+
+    this.renderLoading = this.renderLoading.bind(this)
 
     this.AROONDOWN = 0
     this.AROONUP = 0
@@ -92,8 +89,6 @@ class RippleBot {
     this.updatePrices(true).then(done => {
 
     })
-    // this.updateCandleSticks()
-    // setInterval(this.updateCandleSticks, 15000)
     setInterval(this.updatePrices, 5000)
 
     this.prices = null
@@ -102,17 +97,13 @@ class RippleBot {
   }
 
   calculateAndDraw () {
-    // this.averageDirectionalMovement().then(done => {
-    //   this.calculateDI().then(done => {
-    //     this.calculateAROON().then(done => {
-    //       this.buyHoldSellDecision().then(done => {
     this.calculateEMA().then(done => {
-      this.renderDashboard()
+      if (this.litbotLoading) {
+        this.renderLoading()
+      } else {
+        this.renderDashboard()
+      }
     })
-    //       })
-    //     })
-    //   })
-    // })
   }
 
   calculateEMA () {
@@ -127,64 +118,43 @@ class RippleBot {
     })
   }
 
-  renderDashboard () {
-    var y = _.takeRight(this.chunks.map(chunk => {
-      return Number(chunk.close)
-    }), this.ADX.length)
-    if (this.ADX) {
-      var data = [
-        {
-          title: 'Closing Price',
-          x: Array.apply(null, {length: this.ADX.length}).map(Number.call, Number).map(String),
-          y: y
-        },
-        {
-          title: 'ADX',
-          y: this.ADX.map(value => scale(value, _.min(this.ADX), _.max(this.ADX), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
-          style: {
-            line: 'red'
-          }
-        },
-        {
-          title: 'DI +',
-          y: this.PLUSDI.map(value => scale(value, _.min(this.PLUSDI), _.max(this.PLUSDI), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
-          style: {
-            line: 'green'
-          }
-        },
-        {
-          title: 'DI -',
-          y: this.MINUSDI.map(value => scale(value, _.min(this.MINUSDI), _.max(this.MINUSDI), _.minBy(this.chunks, 'close').close, _.maxBy(this.chunks, 'close').close)),
-          style: {
-            line: 'blue'
-          }
-        }
-      ]
-    } else {
-      var data = {
-        x: Array.apply(null, {length: 11}).map(Number.call, Number).map(String),
-        y: y
-      }
-    }
-
-    let aroonData = [
+  renderLoading () {
+    this.grid.set(0, 0, 12, 12, contrib.donut,
       {
-        title: 'AROON DOWN',
-        x: Array.apply(null, {length: this.AROONDOWN.length}).map(Number.call, Number).map(String),
-        y: this.AROONDOWN,
+        label: 'LITBOT',
+        radius: 30,
+        arcWidth: 3,
+        yPadding: 2,
+        data: [
+          {percent: this.marks.length / 10, label: 'gathering price data', color: 'blue'}
+        ]
+      }
+    )
+
+    screen.key(['escape', 'q', 'C-c'], function (ch, key) {
+      return process.exit(0)
+    })
+
+    screen.render()
+  }
+
+  renderDashboard () {
+    let prices = _.takeRight(this.pricePool.map(priceObj => priceObj.price), 10)
+    var data = [
+      {
+        title: 'Closing Price',
+        x: Array.apply(null, {length: 10}).map(Number.call, Number).map(String),
+        y: prices.map(value => scale(value, _.min(prices), _.max(prices), _.minBy(prices), _.maxBy(prices)))
+      },
+      {
+        title: 'EMA',
+        y: this.marks.map(value => scale(value, _.min(this.marks), _.max(this.marks), _.minBy(prices), _.maxBy(prices))),
         style: {
           line: 'red'
         }
-      },
-      {
-        title: 'AROON UP',
-        x: Array.apply(null, {length: this.AROONUP.length}).map(Number.call, Number).map(String),
-        y: this.AROONUP,
-        style: {
-          line: 'green'
-        }
       }
     ]
+
     this.grid.set(6, 0, 6, 6, contrib.line,
       {
         style: {
@@ -196,31 +166,17 @@ class RippleBot {
         xLabelPadding: 3,
         xPadding: 5,
         label: `${this.symbol} closing price`,
-        minY: _.minBy(this.chunks, 'close').close - 0.00000001,
-        maxY: _.maxBy(this.chunks, 'close').close + 0.00000001,
+        minY: _.minBy(prices),
+        maxY: _.maxBy(prices),
         numYLabels: 7,
         data: data,
         showLegend: false,
         legend: {width: 20}
       }
     )
-    this.grid.set(6, 6, 6, 5, contrib.line,
+    this.grid.set(6, 6, 6, 6, contrib.markdown,
       {
-        style: {
-          line: 'yellow',
-          text: 'green',
-          baseline: 'black'
-        },
-        yLength: 0,
-        xLabelPadding: 3,
-        xPadding: 5,
-        label: `${this.symbol} AROON`,
-        minY: -2,
-        maxY: 102,
-        numYLabels: 7,
-        data: aroonData,
-        showLegend: false,
-        legend: {width: 20}
+        markdown: this.reportProgress()
       }
     )
     this.grid.set(0, 4, 6, 2, contrib.line,
@@ -292,11 +248,8 @@ class RippleBot {
         binance.prices((ticker) => {
           this.tick += 1
           let time = process.hrtime()[0] // seconds since program started
-          this.prices = ticker // this.ticket.XRPETH for example
-          this.addPriceToPool(ticker.XRPBTC, time)
-          // if (!initial) {
-          //   // this.calculateAndDraw()
-          // }
+          this.prices = ticker
+          this.addPriceToPool(this.prices.XRPBTC, time)
           resolve(true)
         })
       } catch (err) {
@@ -306,7 +259,7 @@ class RippleBot {
   }
 
   addPriceToPool (price, time) {
-    if (this.marks.length > 10) {
+    if (this.marks.length > 9) {
       this.pricePool.shift()
     }
     this.pricePool.push({
@@ -338,29 +291,10 @@ class RippleBot {
       lastTime = price.time
     })
     this.marks = newMarks
-    this.calculateAndDraw()
-  }
-
-  updateCandleSticks () {
-    var _this = this
-    try {
-      binance.candlesticks('XRPBTC', '1m', (ticks, symbol) => {
-        _this.chunks = []
-        ticks.forEach((tick, index) => {
-          if (index < 40) {
-            _this.chunks.push({
-              open: Number(tick[1]),
-              close: Number(tick[4]),
-              high: Number(tick[2]),
-              low: Number(tick[3])
-            })
-          }
-        })
-        this.calculateAndDraw()
-      })
-    } catch (err) {
-      
+    if (this.marks.length > 9 && this.litbotLoading) {
+      this.litbotLoading = false
     }
+    this.calculateAndDraw()
   }
 
   buyHoldSellDecision () {
@@ -402,84 +336,6 @@ class RippleBot {
     this._BTC = (this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)) / this.prices.BTCUSDT
     this._XRP = 0
     this.litbotLog.push(`litbot is selling: price - ${(this.prices.BTCUSDT * this.prices.XRPBTC).toFixed(2)}`)
-  }
-
-  // This tells us how strong the trend is. Not weather the trend is up or down.
-  // http://www.swing-trade-stocks.com/ADX-indicator.html I have read if its 20 or lower,
-  // that means its a weak trend. I still don't get how this helps :p
-  averageDirectionalMovement () {
-    return new Promise((resolve, reject) => {
-      talib.execute({
-        name: 'ADX',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        this.ADX = result.result.outReal
-        resolve(true)
-      })
-    })
-  }
-
-  calculateDI () {
-    return new Promise((resolve, reject) => {
-      let thingsToDo = 2
-      talib.execute({
-        name: 'MINUS_DI',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        thingsToDo -= 1
-        this.MINUSDI = result.result.outReal
-        if (!thingsToDo) {
-          this.DI_OCCILATION = this.PLUSDI[this.PLUSDI.length - 1] - this.MINUSDI[this.MINUSDI.length - 1]
-          resolve(true)
-        }
-      })
-      talib.execute({
-        name: 'PLUS_DI',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        thingsToDo -= 1
-        this.PLUSDI = result.result.outReal
-        if (!thingsToDo) {
-          this.DI_OCCILATION = this.PLUSDI[this.PLUSDI.length - 1] - this.MINUSDI[this.MINUSDI.length - 1]
-          resolve(true)
-        }
-      })
-    })
-  }
-
-  // TODO: Convert this to websockets / graph
-  calculateAROON (timePeriod) {
-    return new Promise((resolve, reject) => {
-      talib.execute({
-        name: 'AROON',
-        startIdx: 0,
-        endIdx: this.chunks.length - 1,
-        high: this.chunks.map(chunk => Number(chunk.high)),
-        low: this.chunks.map(chunk => Number(chunk.low)),
-        close: this.chunks.map(chunk => Number(chunk.close)),
-        optInTimePeriod: 9
-      }, (err, result) => {
-        this.AROONDOWN = result.result.outAroonDown
-        this.AROONUP = result.result.outAroonUp
-        this.AROON_OCCILATION = this.AROONUP[this.AROONUP.length - 1] - this.AROONDOWN[this.AROONDOWN.length - 1]
-        resolve(true)
-      })
-    })
   }
 
   reportProgress () {
