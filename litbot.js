@@ -11,6 +11,7 @@ var chalk = require('chalk')
 var screen = blessed.screen()
 
 var scale = require('scale-number-range')
+var ema = require('exponential-moving-average');
 
 class RippleBot {
   constructor () {
@@ -31,16 +32,24 @@ class RippleBot {
     this.LITBOTLOG = this.LITBOTLOG.bind(this)
     this.calculateAndDraw = this.calculateAndDraw.bind(this)
     this.updateCandleSticks = this.updateCandleSticks.bind(this)
+    this.addPriceToPool = this.addPriceToPool.bind(this)
+    this.recalculateMarks = this.recalculateMarks.bind(this)
 
-    this.AROONDOWN
-    this.AROONUP
-    this.AROON_OCCILATION
-    this.ADX
-    this.DI_OCCILATION
+    this.AROONDOWN = 0
+    this.AROONUP = 0
+    this.AROON_OCCILATION = 0
+    this.ADX = []
+    this.DI_OCCILATION = 0
+    this.PLUSDI = []
+    this.MINUSDI = []
+    this.chunks = [{close: 0}]
+    this.tick = 0
 
     this.movement = null
 
-    this.litbotLog = ['this is a test', '#this is another test']
+    this.litbotLog = []
+    this.marks = []
+    this.pricePool = []
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
@@ -48,7 +57,7 @@ class RippleBot {
     })
     console.log('Initiating LitBot!')
 
-    this.chunks = []
+    // this.chunks = []
     this.symbol = 'XRPBTC'
     this.prettyName = 'XRP'
     this.base = 'BTCUSDT'
@@ -80,8 +89,8 @@ class RippleBot {
     this.updatePrices(true).then(done => {
 
     })
-    this.updateCandleSticks()
-    setInterval(this.updateCandleSticks, 15000)
+    // this.updateCandleSticks()
+    // setInterval(this.updateCandleSticks, 15000)
     setInterval(this.updatePrices, 5000)
 
     this.prices = null
@@ -90,15 +99,15 @@ class RippleBot {
   }
 
   calculateAndDraw () {
-    this.averageDirectionalMovement().then(done => {
-      this.calculateDI().then(done => {
-        this.calculateAROON().then(done => {
-          this.buyHoldSellDecision().then(done => {
-            this.renderDashboard()
-          })
-        })
-      })
-    })
+    // this.averageDirectionalMovement().then(done => {
+    //   this.calculateDI().then(done => {
+    //     this.calculateAROON().then(done => {
+    //       this.buyHoldSellDecision().then(done => {
+    this.renderDashboard()
+    //       })
+    //     })
+    //   })
+    // })
   }
 
   renderDashboard () {
@@ -251,21 +260,26 @@ class RippleBot {
   }
 
   LITBOTLOG () {
-    return (`
-      LITBOT is holding...
-      LITBOT is buying...
-      LITBOT is selling...
-    `)
+    let output = ``
+    this.litbotLog.forEach(message => {
+      output += `
+        ${message}
+      `
+    })
+    return output
   }
 
   updatePrices (initial) {
     return new Promise((resolve, reject) => {
       try {
         binance.prices((ticker) => {
+          this.tick += 1
+          let time = process.hrtime()[0] // seconds since program started
           this.prices = ticker // this.ticket.XRPETH for example
-          if (!initial) {
-            this.calculateAndDraw()
-          }
+          this.addPriceToPool(ticker.XRPBTC, time)
+          // if (!initial) {
+          //   // this.calculateAndDraw()
+          // }
           resolve(true)
         })
       } catch (err) {
@@ -274,25 +288,67 @@ class RippleBot {
     })
   }
 
+  addPriceToPool (price, time) {
+    if (this.marks > 10) {
+      this.pricePool.shift()
+    }
+    this.pricePool.push({
+      price: Number(price),
+      time: time
+    })
+    if (this.ticks < 2) {
+      return
+    }
+    this.recalculateMarks()
+  }
+
+  recalculateMarks () {
+    let timePassed = 0
+    let newMarks = []
+    let tempPool = []
+    let lastTime = this.pricePool[0].time
+    this.pricePool.forEach((price, index) => {
+      if (index !== 0) {
+        timePassed += price.time - lastTime
+      }
+      if (timePassed > 10 && tempPool.length > 1) {
+        newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
+        this.tempPool = []
+        timePassed = 0
+      } else {
+        tempPool.push(price)
+      }
+      lastTime = price.time
+    })
+    this.marks = newMarks
+    this.calculateAndDraw()
+  }
+
   updateCandleSticks () {
     var _this = this
-    binance.candlesticks('XRPBTC', '15m', (ticks, symbol) => {
-      _this.chunks = []
-      ticks.forEach(tick => {
-        _this.chunks.push({
-          open: Number(tick[1]),
-          close: Number(tick[4]),
-          high: Number(tick[2]),
-          low: Number(tick[3])
+    try {
+      binance.candlesticks('XRPBTC', '1m', (ticks, symbol) => {
+        _this.chunks = []
+        ticks.forEach((tick, index) => {
+          if (index < 40) {
+            _this.chunks.push({
+              open: Number(tick[1]),
+              close: Number(tick[4]),
+              high: Number(tick[2]),
+              low: Number(tick[3])
+            })
+          }
         })
+        this.calculateAndDraw()
       })
-      this.calculateAndDraw()
-    })
+    } catch (err) {
+      
+    }
   }
 
   buyHoldSellDecision () {
     return new Promise((resolve, reject) => {
-      if (this.AROON_OCCILATION > 20 && this.DI_OCCILATION > 20 && this.ADX[this.ADX.length - 1] > 30) {
+      if (this.AROON_OCCILATION > 20 && this.DI_OCCILATION > 10 && this.ADX[this.ADX.length - 1] > 16) {
         if (this._BTC) {
           this.doBuy()
         }
@@ -315,6 +371,7 @@ class RippleBot {
     // `)
     this._XRP = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices.XRPBTC)
     this._BTC = 0
+    this.litbotLog.push(`litbot is buying: price - ${(this.prices.BTCUSDT * this.prices.XRPBTC).toFixed(2)}`)
   }
 
   doSell () {
@@ -327,6 +384,7 @@ class RippleBot {
     // `)
     this._BTC = (this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)) / this.prices.BTCUSDT
     this._XRP = 0
+    this.litbotLog.push(`litbot is selling: price - ${(this.prices.BTCUSDT * this.prices.XRPBTC).toFixed(2)}`)
   }
 
   // This tells us how strong the trend is. Not weather the trend is up or down.
