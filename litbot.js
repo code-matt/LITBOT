@@ -11,6 +11,7 @@ var screen = blessed.screen()
 
 var scale = require('scale-number-range')
 var ema = require('exponential-moving-average')
+require('events').EventEmitter.defaultMaxListeners = 100
 
 class RippleBot {
   constructor () {
@@ -33,6 +34,7 @@ class RippleBot {
     this.renderLoading = this.renderLoading.bind(this)
     this.updateBalances = this.updateBalances.bind(this)
     this.reportWallet = this.reportWallet.bind(this)
+    this.finishRenderLoading = this.finishRenderLoading.bind(this)
 
     this.AROONDOWN = 0
     this.AROONUP = 0
@@ -62,7 +64,7 @@ class RippleBot {
     this.symbol = 'XRPBTC'
     this.prettyName = 'XRP'
     this.base = 'BTCUSDT'
-    this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
+    this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen, hideBorder: true})
     this.tree = this.grid.set(6, 11, 6, 1, contrib.tree,
       { style: { text: 'red' },
        template: { lines: true },
@@ -127,9 +129,17 @@ class RippleBot {
   }
 
   renderLoading () {
-    this.grid.set(0, 0, 12, 12, contrib.donut,
+    this.grid.set(2, 3, 5, 6, contrib.picture, {
+      cols: 90,
+      file: './litbotlogo.png',
+      onReady: this.finishRenderLoading()
+    })
+  }
+
+  finishRenderLoading () {
+    this.grid.set(5, 0, 7, 12, contrib.donut,
       {
-        label: 'LITBOT',
+        label: '',
         radius: 30,
         arcWidth: 3,
         yPadding: 2,
@@ -292,7 +302,7 @@ class RippleBot {
       if (index !== 0) {
         timePassed += price.time - lastTime
       }
-      if (timePassed > 10 && tempPool.length > 1) {
+      if (timePassed > 5 && tempPool.length > 1) {
         newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
         this.tempPool = []
         timePassed = 0
@@ -303,6 +313,7 @@ class RippleBot {
     })
     this.marks = newMarks
     if (this.marks.length > 9 && this.litbotLoading) {
+      this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
       this.litbotLoading = false
     }
     this.calculateAndDraw()
@@ -312,8 +323,8 @@ class RippleBot {
     let changes = []
     this.marks.forEach((mark, index) => {
       if (index < 6 && index !== 0) {
-        let time = (index + 1) * 15
-        let prevTime = (index) * 15
+        let time = (index + 1) * 10
+        let prevTime = (index) * 10
         changes.push(100000000 / ((time - prevTime) / (mark - this.marks[index - 1])))
       }
     })
