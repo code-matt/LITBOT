@@ -129,7 +129,7 @@ class RippleBot {
   }
 
   renderLoading () {
-    this.grid.set(2, 3, 5, 6, contrib.picture, {
+    this.grid.set(2, 4, 6, 6, contrib.picture, {
       cols: 90,
       file: './litbotlogo.png',
       onReady: this.finishRenderLoading()
@@ -322,7 +322,7 @@ class RippleBot {
   calculateROC () {
     let changes = []
     this.marks.forEach((mark, index) => {
-      if (index < 6 && index !== 0) {
+      if (index < 4 && index !== 0) {
         let time = (index + 1) * 10
         let prevTime = (index) * 10
         changes.push(100000000 / ((time - prevTime) / (mark - this.marks[index - 1])))
