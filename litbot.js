@@ -7,11 +7,10 @@ require('./modified_modules/lodash-math')(_)
 
 var blessed = require('blessed')
 var contrib = require('./modified_modules/blessed-contrib')
-var chalk = require('chalk')
 var screen = blessed.screen()
 
 var scale = require('scale-number-range')
-var ema = require('exponential-moving-average');
+var ema = require('exponential-moving-average')
 
 class RippleBot {
   constructor () {
@@ -32,6 +31,8 @@ class RippleBot {
     this.calculateEMA = this.calculateEMA.bind(this)
     this.calculateROC = this.calculateROC.bind(this)
     this.renderLoading = this.renderLoading.bind(this)
+    this.updateBalances = this.updateBalances.bind(this)
+    this.reportWallet = this.reportWallet.bind(this)
 
     this.AROONDOWN = 0
     this.AROONUP = 0
@@ -94,6 +95,10 @@ class RippleBot {
     this.prices = null
     this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
     this._BTC = 0.05 // start with 0.05 BTC
+
+    this.coins = ['AMB', 'BNB', 'BRD', 'BTC', 'POE', 'XRP', 'XVG']
+    this.updateBalances()
+    setInterval(this.updateBalances, 10000)
   }
 
   calculateAndDraw () {
@@ -179,7 +184,7 @@ class RippleBot {
     )
     this.grid.set(6, 6, 6, 6, contrib.markdown,
       {
-        markdown: this.reportProgress()
+        markdown: this.reportWallet()
       }
     )
     this.grid.set(0, 4, 6, 2, contrib.line,
@@ -236,6 +241,9 @@ class RippleBot {
   }
 
   LITBOTLOG () {
+    if (this.litbotLog.length > 7) {
+      this.litbotLog.shift()
+    }
     let output = ``
     this.litbotLog.forEach(message => {
       output += `
@@ -320,7 +328,7 @@ class RippleBot {
           this.doBuy()
         }
       } else {
-        if (this._XRP) {
+        if (this._XRP && this.averageROC <= -0.2) {
           this.doSell()
         }
       }
@@ -354,6 +362,12 @@ class RippleBot {
     this.litbotLog.push(`litbot is selling: price - ${(this.prices.BTCUSDT * this.prices.XRPBTC).toFixed(2)}`)
   }
 
+  updateBalances () {
+    binance.balance(balances => {
+      this.balances = balances
+    })
+  }
+
   reportProgress () {
     return (`
       LITBOT PROGRESS REPORT(Started with 0.05 BTC):
@@ -374,6 +388,31 @@ class RippleBot {
     return (`
       AVERAGE ROC 1m15s: ${this.averageROC}
     `)
+  }
+
+  reportWallet () {
+    let output = ``
+    let totalValue = 0
+    let value
+    this.coins.forEach(coin => {
+      if (coin !== 'BTC') {
+        value = (this.prices[`${coin}BTC`] * this.balances[coin].available) * this.prices.BTCUSDT
+      } else {
+        value = (this.prices.BTCUSDT * this.balances[coin].available)
+      }
+      output += `
+        ${coin}: ${Number(this.balances[coin].available).toFixed(3)} ---- Value: ${value}
+      `
+      totalValue += value
+    })
+    return (
+      `Your Wallet:
+      
+      
+      ${output} 
+      
+      Total walet value: ${totalValue}`
+    )
   }
 
   calcMyXRPBalanceAndValue () {
