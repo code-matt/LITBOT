@@ -34,6 +34,7 @@ class RippleBot {
     this.updateCandleSticks = this.updateCandleSticks.bind(this)
     this.addPriceToPool = this.addPriceToPool.bind(this)
     this.recalculateMarks = this.recalculateMarks.bind(this)
+    this.calculateEMA = this.calculateEMA.bind(this)
 
     this.AROONDOWN = 0
     this.AROONUP = 0
@@ -50,6 +51,8 @@ class RippleBot {
     this.litbotLog = []
     this.marks = []
     this.pricePool = []
+
+    this.litbotLoading = true
 
     binance.options({
       'APIKEY': process.env.BINANCE_PUBLIC_KEY,
@@ -103,11 +106,25 @@ class RippleBot {
     //   this.calculateDI().then(done => {
     //     this.calculateAROON().then(done => {
     //       this.buyHoldSellDecision().then(done => {
-    this.renderDashboard()
+    this.calculateEMA().then(done => {
+      this.renderDashboard()
+    })
     //       })
     //     })
     //   })
     // })
+  }
+
+  calculateEMA () {
+    return new Promise((resolve, reject) => {
+      if (this.marks.length === 10) {
+        this.EMA = ema(this.marks, {
+          range: 5,
+          format: n => Number(n.toFixed(8))
+        })
+      }
+      resolve(true)
+    })
   }
 
   renderDashboard () {
@@ -289,7 +306,7 @@ class RippleBot {
   }
 
   addPriceToPool (price, time) {
-    if (this.marks > 10) {
+    if (this.marks.length > 10) {
       this.pricePool.shift()
     }
     this.pricePool.push({
