@@ -66,7 +66,7 @@ Bar.prototype.setData = function(bar) {
     if (this.options.barFgColor)
       c.fillStyle = this.options.barFgColor;
     if (this.options.showText)
-      c.fillText(bar.data[i].toString(), x + 1, this.canvasSize.height - 4);
+      // c.fillText(bar.data[i].toString(), x + 1, this.canvasSize.height - 4);
     c.strokeStyle = 'normal'
     c.fillStyle = 'white';
     if (this.options.labelColor)
