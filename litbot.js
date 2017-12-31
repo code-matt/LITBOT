@@ -22,7 +22,7 @@ if (!fs.existsSync('log.json')) {
     console.log('logfile generated')
   })
 }
-require('events').EventEmitter.defaultMaxListeners = 100
+require('events').EventEmitter.defaultMaxListeners = 300
 
 const LITBOT_LOG_LENGTH = 4
 const POLLING_INTERVAL = 1
@@ -50,6 +50,7 @@ class RippleBot {
     this.calculateAndDraw = this.calculateAndDraw.bind(this)
     this.addPriceToPool = this.addPriceToPool.bind(this)
     this.recalculateMarksShort = this.recalculateMarksShort.bind(this)
+    this.recalculateMarksLong = this.recalculateMarksLong.bind(this)
     this.calculateEMA = this.calculateEMA.bind(this)
     this.calculateROC = this.calculateROC.bind(this)
     this.renderLoading = this.renderLoading.bind(this)
@@ -59,18 +60,11 @@ class RippleBot {
     this.updateCandlesticks = this.updateCandlesticks.bind(this)
     this.getDepth = this.getDepth.bind(this)
     this.getPricePoolOverage = this.getPricePoolOverage.bind(this)
+    this.getTimePeriod = this.getTimePeriod.bind(this)
 
     this.parseLog = this.parseLog.bind(this)
     this.writeLog = this.writeLog.bind(this)
 
-    this.AROONDOWN = 0
-    this.AROONUP = 0
-    this.AROON_OCCILATION = 0
-    this.ADX = []
-    this.DI_OCCILATION = 0
-    this.PLUSDI = []
-    this.MINUSDI = []
-    this.chunks = [{close: 0}]
     this.tick = 0
 
     this.ROCBoughtAt = null
@@ -79,7 +73,8 @@ class RippleBot {
 
     this.parseLog().then(log => {
       this.litbotLog = log
-      this.marks = []
+      this.marksShort = []
+      this.marksLong = []
       this.pricePool = []
       this.ranges = {
         '1h': {
@@ -146,8 +141,8 @@ class RippleBot {
       this._BTC = 0.05 // start with 0.05 BTC
 
       this.coins = ['POE', 'XRP', 'BNB', 'BRD', 'BTC']
-      this.updateBalances()
-      setInterval(this.updateBalances, 120000)
+      // this.updateBalances()
+      // setInterval(this.updateBalances, 120000)
     })
   }
 
@@ -204,7 +199,7 @@ class RippleBot {
         arcWidth: 3,
         yPadding: 2,
         data: [
-          {percent: this.marks.length / MARK_COUNT_SHORT, label: 'gathering price data', color: 'blue'}
+          {percent: this.marksLong.length / MARK_COUNT_LONG, label: 'gathering price data', color: 'blue'}
         ]
       }
     )
@@ -217,16 +212,15 @@ class RippleBot {
   }
 
   renderDashboard () {
-    // let prices = _.takeRight(this.marks.map(priceObj => priceObj.price), 5)
     var data = [
       {
         title: 'Closing Price',
         x: Array.apply(null, {length: this.EMA.length}).map(Number.call, Number).map(String),
-        y: _.takeRight(this.marks.map(value => scale(value, _.min(this.marks), _.max(this.marks), _.minBy(this.marks), _.maxBy(this.marks))), this.EMA.length)
+        y: _.takeRight(this.marksShort.map(value => scale(value, _.min(this.marksShort), _.max(this.marksShort), _.minBy(this.marksShort), _.maxBy(this.marksShort))), this.EMA.length)
       },
       {
         title: 'EMA',
-        y: this.EMA.map(value => scale(value, _.min(this.EMA), _.max(this.EMA), _.minBy(this.marks), _.maxBy(this.marks))),
+        y: this.EMA.map(value => scale(value, _.min(this.EMA), _.max(this.EMA), _.minBy(this.marksShort), _.maxBy(this.marksShort))),
         style: {
           line: 'red'
         }
@@ -239,13 +233,6 @@ class RippleBot {
         x: Array.apply(null, {length: pricePoolMapped.length}).map(Number.call, Number).map(String),
         y: pricePoolMapped.map(value => scale(value, _.min(pricePoolMapped), _.max(pricePoolMapped), _.minBy(pricePoolMapped), _.maxBy(pricePoolMapped)))
       }
-      // {
-      //   title: 'EMA',
-      //   y: this.EMA.map(value => scale(value, _.min(this.EMA), _.max(this.EMA), _.minBy(this.marks), _.maxBy(this.marks))),
-      //   style: {
-      //     line: 'red'
-      //   }
-      // }
     ]
 
     this.grid.set(6, 0, 6, 8, contrib.line,
@@ -259,8 +246,8 @@ class RippleBot {
         xLabelPadding: 3,
         xPadding: 5,
         label: `${this.symbol} Average Price / EMA. - Moving ${MARK_TIME_PERIOD_SHORT}s periods`,
-        minY: _.minBy(this.marks) - 0.00000002,
-        maxY: _.maxBy(this.marks) + 0.00000002,
+        minY: _.minBy(this.marksShort) - 0.00000002,
+        maxY: _.maxBy(this.marksShort) + 0.00000002,
         numYLabels: 7,
         data: data,
         showLegend: false,
@@ -283,35 +270,7 @@ class RippleBot {
         markdown: this.reportWallet()
       }
     )
-    // this.grid.set(0, 4, 6, 2, contrib.line,
-    //   {
-    //     style: {
-    //       line: 'yellow',
-    //       text: 'green',
-    //       baseline: 'black'
-    //     },
-    //     yLength: 0,
-    //     yLabelPadding: -30,
-    //     xLabelPadding: 0,
-    //     xPadding: 0,
-    //     label: `LITBOT EARNINGS/LOSSES`,
-    //     minY: -0.2,
-    //     maxY: 0.2,
-    //     numYLabels: 4,
-    //     data: [
-    //       {
-    //         x: Array.apply(null, {length: 5}).map(Number.call, Number).map(String),
-    //         y: [0.002, -0.05, 0.04, 0.02, 0.04]
-    //       },
-    //       {
-    //         y: [0, 0, 0, 0, 0],
-    //         style: {
-    //           line: 'red'
-    //         }
-    //       }
-    //     ]
-    //   }
-    // )
+
     this.grid.set(0, 0, 6, 2, contrib.markdown,
       {
         markdown: this.reportProgress()
@@ -328,19 +287,14 @@ class RippleBot {
         xLabelPadding: 3,
         xPadding: 5,
         label: `${this.symbol} Raw Price Data - Moving ${1}s periods`,
-        minY: _.minBy(this.marks) - 0.00000023,
-        maxY: _.maxBy(this.marks) + 0.00000023,
+        minY: _.minBy(this.marksShort) - 0.00000023,
+        maxY: _.maxBy(this.marksShort) + 0.00000023,
         numYLabels: 7,
         data: data2,
         showLegend: false,
         legend: {width: 20}
       }
     )
-    // this.grid.set(0, 6, 6, 3, contrib.markdown,
-    //   {
-    //     markdown: this.reportDecicionStatus()
-    //   }
-    // )
 
     this.grid.set(0, 9, 8, 3, contrib.markdown,
       {
@@ -371,7 +325,6 @@ class RippleBot {
       try {
         binance.prices((ticker) => {
           this.tick += 1
-          // let time = process.hrtime()[0] // seconds since program started
           let time = Date.now()
           this.prices = ticker
           this.addPriceToPool(this.prices.XRPBTC, time)
@@ -391,13 +344,14 @@ class RippleBot {
     if (this.ticks < 2) {
       return
     }
-    if (this.marks.length >= MARK_COUNT_SHORT) {
+    if (this.marksLong.length >= MARK_COUNT_LONG) {
       let overage = this.getPricePoolOverage()
       if (overage) {
         this.pricePool.splice(0, overage)
       }
     }
     this.recalculateMarksShort()
+    this.recalculateMarksLong()
   }
 
   getPricePoolOverage () {
@@ -407,7 +361,31 @@ class RippleBot {
         total += price.time - this.pricePool[index - 1].time
       }
     })
-    return total > (MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT) ? Math.ceil(total - (MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT)) : false
+    return total > (MARK_TIME_PERIOD_LONG * MARK_COUNT_LONG) ? Math.ceil(total - (MARK_TIME_PERIOD_LONG * MARK_COUNT_LONG)) : false
+  }
+
+  getTimePeriod (durationSec, log) {
+    // go backwards and stop filling array once we hit durationSec
+    let newPricePool = []
+    let timePassed = 0
+    for (let i = this.pricePool.length - 1; i > 0; i--) {
+      if (this.pricePool.length !== 1) {
+        let lastTime = this.pricePool[i].time
+        timePassed += Math.abs(this.pricePool[i].time - this.pricePool[i - 1].time)
+        if (timePassed <= durationSec + POLLING_INTERVAL) {
+          newPricePool.unshift(this.pricePool[i])
+        } else {
+          if (log) {
+            console.log(`
+              thisTick: ${lastTime - this.pricePool[i].time}
+              timePassed: ${timePassed}
+              durationSec: ${durationSec}
+            `)
+          }
+        }
+      }
+    }
+    return newPricePool
   }
 
   recalculateMarksShort () {
@@ -415,21 +393,42 @@ class RippleBot {
     let newMarks = []
     let tempPool = []
     let lastTime = this.pricePool[0].time
-    this.pricePool.forEach((price, index) => {
+    this.getTimePeriod(MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT, false).forEach((price, index) => {
       if (index !== 0) {
         timePassed += price.time - lastTime
+        if (timePassed > MARK_TIME_PERIOD_SHORT - POLLING_INTERVAL && tempPool.length > 1) {
+          newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
+          tempPool = []
+          timePassed = 0
+        } else {
+          tempPool.push(price)
+        }
+        lastTime = price.time
       }
-      if (timePassed > MARK_TIME_PERIOD_SHORT - POLLING_INTERVAL && tempPool.length > 1) {
-        newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
-        this.tempPool = []
-        timePassed = 0
-      } else {
-        tempPool.push(price)
-      }
-      lastTime = price.time
     })
-    this.marks = newMarks
-    if (this.marks.length === MARK_COUNT_SHORT && this.litbotLoading) {
+    this.marksShort = newMarks
+  }
+
+  recalculateMarksLong () {
+    let timePassed = 0
+    let newMarks = []
+    let tempPool = []
+    let lastTime = this.pricePool[0].time
+    this.getTimePeriod(MARK_TIME_PERIOD_LONG * MARK_COUNT_LONG, true).forEach((price, index) => {
+      if (index !== 0) {
+        timePassed += price.time - lastTime
+        if (timePassed > MARK_TIME_PERIOD_LONG - POLLING_INTERVAL && tempPool.length > 1) {
+          newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
+          tempPool = []
+          timePassed = 0
+        } else {
+          tempPool.push(price)
+        }
+        lastTime = price.time
+      }
+    })
+    this.marksLong = newMarks
+    if (this.marksLong.length === MARK_COUNT_LONG && this.litbotLoading) {
       this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
       this.litbotLoading = false
     }
@@ -438,11 +437,12 @@ class RippleBot {
 
   calculateEMA () {
     return new Promise((resolve, reject) => {
-      if (this.marks.length >= MARK_COUNT_SHORT) {
-        this.EMA = ema(this.marks, {
+      if (this.marksShort.length >= MARK_COUNT_SHORT) {
+        this.EMA = ema(this.marksShort, {
           range: MARK_COUNT_SHORT / 2,
           format: n => Number(n.toFixed(8))
         })
+        // console.log('EMA:', this.EMA)
       }
       resolve(true)
     })
@@ -571,7 +571,7 @@ class RippleBot {
 
       AVERAGE ROC: ${this.averageROC}
       AVERAGE ROC SHORT: ${this.averageROCShort}
-      NUM OF MARKS: ${this.marks.length}
+      NUM OF MARKS: ${this.marksShort.length}
       NUM IN PRICE POOL: ${this.pricePool.length}
 
       1h high: ${this.ranges['1h'].high.toFixed(10)}
@@ -586,33 +586,39 @@ class RippleBot {
   reportDecicionStatus () {
     return (`
       AVERAGE ROC: ${this.averageROC}
-      NUM OF MARKS: ${this.marks.length}
+      NUM OF MARKS: ${this.marksShort.length}
       NUM IN PRICE POOL: ${this.pricePool.length}
     `)
   }
 
   reportWallet () {
-    let output = ``
-    let totalValue = 0
-    let value
-    this.coins.forEach(coin => {
-      if (coin !== 'BTC') {
-        value = (this.prices[`${coin}BTC`] * this.balances[coin].available) * this.prices.BTCUSDT
-      } else {
-        value = (this.prices.BTCUSDT * this.balances[coin].available)
-      }
-      output += `
-        ${coin}: ${Number(this.balances[coin].available).toFixed(3)} ---- Value: ${value}
-      `
-      totalValue += value
-    })
-    return (
-      `Your Wallet:
-
-      ${output} 
-      
-      Total walet value: ${totalValue}`
-    )
+    if (this.balances) {
+      let output = ``
+      let totalValue = 0
+      let value
+      this.coins.forEach(coin => {
+        if (coin !== 'BTC') {
+          value = (this.prices[`${coin}BTC`] * this.balances[coin].available) * this.prices.BTCUSDT
+        } else {
+          value = (this.prices.BTCUSDT * this.balances[coin].available)
+        }
+        output += `
+          ${coin}: ${Number(this.balances[coin].available).toFixed(3)} ---- Value: ${value}
+        `
+        totalValue += value
+      })
+      return (
+        `Your Wallet:
+  
+        ${output} 
+        
+        Total walet value: ${totalValue}`
+      )
+    } else {
+      return (`
+        Wallet data retreival failed! =(
+      `)
+    }
   }
 
   calcMyXRPBalanceAndValue () {
