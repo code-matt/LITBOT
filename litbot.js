@@ -27,9 +27,9 @@ require('events').EventEmitter.defaultMaxListeners = 300
 const LITBOT_LOG_LENGTH = 4
 const POLLING_INTERVAL = 1
 
-const MARK_COUNT_SHORT = 8
-const SHORT_ROC_MARKS = 4
-const MARK_TIME_PERIOD_SHORT = 3
+const MARK_COUNT_SHORT = 10
+// const SHORT_ROC_MARKS = 4
+const MARK_TIME_PERIOD_SHORT = 5
 
 const MARK_COUNT_LONG = 10
 const MARK_TIME_PERIOD_LONG = 15
@@ -141,8 +141,8 @@ class RippleBot {
       this._BTC = 0.05 // start with 0.05 BTC
 
       this.coins = ['POE', 'XRP', 'BNB', 'BRD', 'BTC']
-      // this.updateBalances()
-      // setInterval(this.updateBalances, 120000)
+      this.updateBalances()
+      setInterval(this.updateBalances, 120000)
     })
   }
 
@@ -387,13 +387,10 @@ class RippleBot {
     this.recalculateMarksLong()
   }
 
-  // Splice tells this function wether to remove the excess from pricepool or not.
-  // only the long does this, since short is calculated and set.
-  getTimePeriod (durationSec, splice) {
+  getTimePeriod (durationSec) {
     // go backwards and stop filling array once we hit durationSec
     let newPricePool = []
     let timePassed = 0
-    let idxToRemove = []
     for (let i = this.pricePool.length - 1; i > 0; i--) {
       if (this.pricePool.length !== 1) {
         // let lastTime = this.pricePool[i].time
@@ -402,14 +399,9 @@ class RippleBot {
           // since we are going backwards... we fill the array from the front for them
           // to be in correct chronological order.
           newPricePool.unshift(this.pricePool[i])
-        } else {
-          if (splice) {
-            idxToRemove.push(i)
-          }
         }
       }
     }
-    // idxToRemove.forEach(index => this.pricePool.splice(index, 1))
     return newPricePool
   }
 
@@ -443,7 +435,7 @@ class RippleBot {
       if (index !== 0) {
         timePassed += price.time - lastTime
         if (timePassed > MARK_TIME_PERIOD_LONG - POLLING_INTERVAL && tempPool.length > 1) {
-          newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
+          newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length)
           tempPool = []
           timePassed = 0
         } else {
@@ -495,17 +487,6 @@ class RippleBot {
     })
     this.changes = changes
     this.averageROC = (this.changes.reduce((a, b) => a + b, 0) / this.EMASHORT.length).toFixed(3)
-
-    changes = []
-    this.EMASHORT.forEach((mark, index) => {
-      if (index < SHORT_ROC_MARKS && index !== 0) {
-        let time = (index + 1) * POLLING_INTERVAL
-        let prevTime = (index) * POLLING_INTERVAL
-        changes.push(100000000 / ((time - prevTime) / (mark - this.EMASHORT[index - 1])))
-      }
-    })
-    this.changes = changes
-    this.averageROCShort = (this.changes.reduce((a, b) => a + b, 0) / SHORT_ROC_MARKS).toFixed(3)
 
     changes = []
     this.EMALONG.forEach((mark, index) => {
