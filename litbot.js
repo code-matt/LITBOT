@@ -27,8 +27,8 @@ require('events').EventEmitter.defaultMaxListeners = 300
 const LITBOT_LOG_LENGTH = 4
 const POLLING_INTERVAL = 1
 
-const MARK_COUNT_SHORT = 6
-const MARK_TIME_PERIOD_SHORT = 5
+const MARK_COUNT_SHORT = 10
+const MARK_TIME_PERIOD_SHORT = 1
 
 const MARK_COUNT_LONG = 8
 const MARK_TIME_PERIOD_LONG = 15
@@ -89,6 +89,7 @@ class RippleBot {
       }
 
       this.litbotLoading = true
+      this.lastPrice = 0
 
       binance.options({
         'APIKEY': process.env.BINANCE_PUBLIC_KEY,
@@ -411,33 +412,7 @@ class RippleBot {
   }
 
   recalculateMarksShort () {
-    let timePassed = 0
-    let newMarks = []
-    let tempPool = []
-    // let numToTake = ((MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT) / POLLING_INTERVAL) + 1
-    let inDuration = this.getTimePeriod(MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT)
-    inDuration.forEach((price, index) => {
-      if (newMarks.length <= MARK_COUNT_SHORT) {
-        timePassed += price.time
-        if (timePassed >= MARK_TIME_PERIOD_SHORT - POLLING_INTERVAL) {
-          if (!tempPool.length) {
-            newMarks.push(price)
-          } else {
-            newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length)
-            tempPool = []
-            timePassed = 0
-          }
-        } else {
-          tempPool.push(price)
-        }
-      }
-    })
-    if (newMarks.length - this.marksShort.length > 1) {
-      // console.log(`
-      //   wtf
-      // `)
-    }
-    this.marksShort = newMarks
+    this.marksShort = _.takeRight(this.pricePool, MARK_COUNT_SHORT).map(priceObj => priceObj.price)
   }
 
   recalculateMarksLong () {
