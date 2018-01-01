@@ -27,11 +27,10 @@ require('events').EventEmitter.defaultMaxListeners = 300
 const LITBOT_LOG_LENGTH = 4
 const POLLING_INTERVAL = 1
 
-const MARK_COUNT_SHORT = 10
-// const SHORT_ROC_MARKS = 4
+const MARK_COUNT_SHORT = 6
 const MARK_TIME_PERIOD_SHORT = 5
 
-const MARK_COUNT_LONG = 10
+const MARK_COUNT_LONG = 8
 const MARK_TIME_PERIOD_LONG = 15
 
 class RippleBot {
@@ -71,16 +70,18 @@ class RippleBot {
 
     this.movement = null
 
+    this.lastPriceTime = null
+
     this.parseLog().then(log => {
       this.litbotLog = log
       this.marksShort = []
       this.marksLong = []
       this.pricePool = []
       this.ranges = {
-        '1h': {
-          low: null,
-          high: null
-        },
+        // '1h': {
+        //   low: null,
+        //   high: null
+        // },
         '24h': {
           low: null,
           high: null
@@ -95,8 +96,8 @@ class RippleBot {
       })
       console.log('Initiating LitBot!')
 
-      this.symbol = 'XRPBTC'
-      this.prettyName = 'XRP'
+      this.symbol = 'BNBBTC'
+      this.prettyName = 'BNB'
       this.base = 'BTCUSDT'
       this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen, hideBorder: true})
       this.tree = this.grid.set(6, 11, 6, 1, contrib.tree,
@@ -137,7 +138,7 @@ class RippleBot {
       setInterval(this.updateCandlesticks, 60000 * 5)
 
       this.prices = null
-      this._XRP = 0 // start with 0 ripple.. bot decides when to make the first buy
+      this._coinBalance = 0 // start with 0 ripple.. bot decides when to make the first buy
       this._BTC = 0.05 // start with 0.05 BTC
 
       this.coins = ['POE', 'XRP', 'BNB', 'BRD', 'BTC']
@@ -245,7 +246,8 @@ class RippleBot {
       {
         title: 'Raw Price Data',
         x: Array.apply(null, {length: pricePoolMapped.length}).map(Number.call, Number).map(String),
-        y: pricePoolMapped.map(value => scale(value, _.min(pricePoolMapped), _.max(pricePoolMapped), _.minBy(pricePoolMapped), _.maxBy(pricePoolMapped)))
+        // y: pricePoolMapped.map(value => scale(value, _.min(pricePoolMapped), _.max(pricePoolMapped), _.minBy(pricePoolMapped), _.maxBy(pricePoolMapped)))
+        y: pricePoolMapped
       }
     ]
 
@@ -290,7 +292,7 @@ class RippleBot {
         markdown: this.reportProgress()
       }
     )
-    this.grid.set(0, 2, 4, 7, contrib.line,
+    this.grid.set(0, 2, 3, 7, contrib.line,
       {
         style: {
           line: 'yellow',
@@ -301,8 +303,8 @@ class RippleBot {
         xLabelPadding: 3,
         xPadding: 5,
         label: `${this.symbol} LONG EMA. - Moving ${MARK_TIME_PERIOD_LONG}s periods`,
-        minY: _.minBy(this.EMALONG), // - 0.00000023
-        maxY: _.maxBy(this.EMALONG),
+        minY: _.minBy(this.EMALONG) - 0.00000023, // - 0.00000023
+        maxY: _.maxBy(this.EMALONG) + 0.00000023,
         numYLabels: 7,
         data: data2,
         showLegend: false,
@@ -310,7 +312,7 @@ class RippleBot {
       }
     )
 
-    this.grid.set(4, 2, 2, 7, contrib.line,
+    this.grid.set(3, 2, 3, 7, contrib.line,
       {
         style: {
           line: 'yellow',
@@ -361,7 +363,7 @@ class RippleBot {
           this.tick += 1
           let time = Date.now()
           this.prices = ticker
-          this.addPriceToPool(this.prices.XRPBTC, time)
+          this.addPriceToPool(this.prices[this.symbol], time)
           resolve(true)
         })
       } catch (err) {
@@ -373,13 +375,17 @@ class RippleBot {
   // BIG TODO: Start storing all these in a database for
   // backtesting and also machine learning.
   addPriceToPool (price, time) {
-    if (this.marksLong.length >= MARK_COUNT_LONG) {
+    if (!this.pricePool.length) {
+      this.lastPriceTime = time - 1000
+    }
+    if (this.marksLong.length >= MARK_COUNT_LONG && !this.litbotLoading) {
       this.pricePool.splice(0, 1)
     }
     this.pricePool.push({
       price: Number(price),
-      time: Number(time / 1000)
+      time: Number(time - this.lastPriceTime) / 1000
     })
+    this.lastPriceTime = time
     if (this.ticks < 2) {
       return
     }
@@ -393,8 +399,7 @@ class RippleBot {
     let timePassed = 0
     for (let i = this.pricePool.length - 1; i > 0; i--) {
       if (this.pricePool.length !== 1) {
-        // let lastTime = this.pricePool[i].time
-        timePassed += Math.abs(this.pricePool[i].time - this.pricePool[i - 1].time)
+        timePassed += this.pricePool[i].time
         if (timePassed <= durationSec + POLLING_INTERVAL) {
           // since we are going backwards... we fill the array from the front for them
           // to be in correct chronological order.
@@ -409,20 +414,29 @@ class RippleBot {
     let timePassed = 0
     let newMarks = []
     let tempPool = []
-    let lastTime = this.pricePool[0].time
-    this.getTimePeriod(MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT, false).forEach((price, index) => {
-      if (index !== 0) {
-        timePassed += price.time - lastTime
-        if (timePassed > MARK_TIME_PERIOD_SHORT - POLLING_INTERVAL && tempPool.length > 1) {
-          newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length) // average the prices from 15s~
-          tempPool = []
-          timePassed = 0
+    // let numToTake = ((MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT) / POLLING_INTERVAL) + 1
+    let inDuration = this.getTimePeriod(MARK_TIME_PERIOD_SHORT * MARK_COUNT_SHORT)
+    inDuration.forEach((price, index) => {
+      if (newMarks.length <= MARK_COUNT_SHORT) {
+        timePassed += price.time
+        if (timePassed >= MARK_TIME_PERIOD_SHORT - POLLING_INTERVAL) {
+          if (!tempPool.length) {
+            newMarks.push(price)
+          } else {
+            newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length)
+            tempPool = []
+            timePassed = 0
+          }
         } else {
           tempPool.push(price)
         }
-        lastTime = price.time
       }
     })
+    if (newMarks.length - this.marksShort.length > 1) {
+      // console.log(`
+      //   wtf
+      // `)
+    }
     this.marksShort = newMarks
   }
 
@@ -430,10 +444,10 @@ class RippleBot {
     let timePassed = 0
     let newMarks = []
     let tempPool = []
-    let lastTime = this.pricePool[0].time
-    this.getTimePeriod(MARK_TIME_PERIOD_LONG * MARK_COUNT_LONG, true).forEach((price, index) => {
+    let inDuration = this.getTimePeriod((MARK_TIME_PERIOD_LONG * MARK_COUNT_LONG) + 10)
+    inDuration.forEach((price, index) => {
       if (index !== 0) {
-        timePassed += price.time - lastTime
+        timePassed += price.time
         if (timePassed > MARK_TIME_PERIOD_LONG - POLLING_INTERVAL && tempPool.length > 1) {
           newMarks.push(_.reduce(tempPool, (sum, n) => sum + n.price, 0) / tempPool.length)
           tempPool = []
@@ -441,11 +455,10 @@ class RippleBot {
         } else {
           tempPool.push(price)
         }
-        lastTime = price.time
       }
     })
     this.marksLong = newMarks
-    if (this.marksLong.length === MARK_COUNT_LONG && this.litbotLoading) {
+    if (this.marksLong.length >= MARK_COUNT_LONG && this.litbotLoading) {
       this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
       this.litbotLoading = false
     }
@@ -501,34 +514,11 @@ class RippleBot {
   }
 
   updateCandlesticks () {
-    let newLow = 100000
-    let newHigh = 0
-    binance.candlesticks('XRPBTC', '1h', (ticks, symbol) => {
-      let high
-      let low
-      ticks.forEach((tick, index) => {
-        if (index < 23) {
-          high = Number(tick[2])
-          low = Number(tick[3])
-          if (high > newHigh) {
-            newHigh = high
-          }
-          if (low < newLow) {
-            newLow = low
-          }
-          this.ranges['24h'] = {
-            low: newLow,
-            high: newHigh
-          }
-        }
-      })
-      high = Number(ticks[0][2])
-      low = Number(ticks[0][3])
-      this.ranges['1h'] = {
-        low: low,
-        high: high
+    binance.prevDay(this.symbol, (prevDay, symbol) => {
+      this.ranges['24h'] = {
+        low: Number(prevDay.lowPrice),
+        high: Number(prevDay.highPrice)
       }
-      this.candlesticks = ticks
       this.calculateAndDraw()
     })
   }
@@ -540,7 +530,7 @@ class RippleBot {
           this.doBuy()
         }
       } else {
-        if (this._XRP && (this.averageROC < 0 || this.averageROCLong < 1)) {
+        if (this._coinBalance && (this.averageROC < 0 || this.averageROCLong < 1)) {
           this.doSell()
         }
       }
@@ -550,27 +540,27 @@ class RippleBot {
 
   doBuy () {
     this.ROCBoughtAt = this.averageROC
-    this.XRPBuyPrice = this.prices.XRPBTC
-    this._XRP = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices.XRPBTC)
+    this.buyPrice = this.prices[this.symbol]
+    this._coinBalance = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices[this.symbol])
     this._BTC = 0
     this.litbotLog.push(`
      LITBOT is buying:
      ROCBoughtAt: ${this.ROCBoughtAt}
-     XRPBTC Price: ${this.prices.XRPBTC}
+     ${this.symbol} Price: ${this.prices[this.symbol]}
      `)
     this.writeLog()
   }
 
   doSell () {
-    let profit = (this.prices.XRPBTC - this.XRPBuyPrice).toFixed(8)
-    this.XRPBuyPrice = null
-    this._BTC = (this._XRP * (this.prices.BTCUSDT * this.prices.XRPBTC)) / this.prices.BTCUSDT
-    this._XRP = 0
+    let profit = (this.prices[this.symbol] - this.buyPrice).toFixed(8)
+    this.buyPrice = null
+    this._BTC = (this._coinBalance * (this.prices.BTCUSDT * this.prices[this.symbol])) / this.prices.BTCUSDT
+    this._coinBalance = 0
     this.litbotLog.push(`
      LITBOT is selling:
      ROCSoldAt: ${this.averageROC}
-     XRPBTC Price: ${this.prices.XRPBTC}
-     XRPBTC gain/loss: ${profit}
+     ${this.symbol} Price: ${this.prices[this.symbol]}
+     ${this.symbol} gain/loss: ${profit}
      `)
     this.writeLog()
   }
@@ -582,15 +572,15 @@ class RippleBot {
   }
 
   reportProgress () {
-    if (this.XRPBuyPrice) {
-      var BTCmessage = `XRP price change since buy: ${(this.prices.XRPBTC - this.XRPBuyPrice).toFixed(8)}`
+    if (this.buyPrice) {
+      var BTCmessage = `${this.prettyName} price change since buy: ${(this.prices[this.symbol] - this.buyPrice).toFixed(8)}`
     } else {
-      var BTCmessage = `XRP price change since buy: N/A`
+      var BTCmessage = `${this.prettyName} price change since buy: N/A`
     }
     return (`
       LITBOT REPORT:
       (Started with 0.05 BTC)
-        XRP: ${this._XRP}
+        ${this.prettyName}: ${this._coinBalance}
         BTC: ${this._BTC}
       ${BTCmessage}
       --------------------
@@ -600,8 +590,6 @@ class RippleBot {
       NUM OF SHORT MARKS: ${this.marksShort.length}
       NUM OF LONG MARKS: ${this.marksLong.length}
       NUM IN PRICE POOL: ${this.pricePool.length}
-      1h high: ${this.ranges['1h'].high.toFixed(10)}
-      1h low: ${this.ranges['1h'].low.toFixed(10)}
       24h high: ${this.ranges['24h'].high.toFixed(10)}
       24h low: ${this.ranges['24h'].low.toFixed(10)}
     `)
