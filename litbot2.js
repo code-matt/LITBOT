@@ -76,11 +76,11 @@ class RippleBot {
             this.coins.set(coinData.symbol, new Coin(coinData))
           }
         })
+        this.renderDashboard()
         this.firstGet = true
       } else {
         this.updateCoins(allCoins)
       }
-      this.renderDashboard()
     })
   }
 
@@ -94,9 +94,13 @@ class RippleBot {
   }
 
   renderDashboard () {
-    Array.from(this.coins.keys()).forEach((symbol, index) => {
+    let vertRow = 0
+    this.getCoinKeys('priceChangePercent').forEach((symbol, index) => {
       if (index < 144) {
-        this.grid.set(Math.ceil(index / 12), 0, 1, 1, contrib.markdown,
+        if (index && !(index % 12)) {
+          vertRow += 2
+        }
+        this.grid.set(vertRow, (index % 6) * 2, 2, 2, contrib.markdown,
           {
             markdown: this.coins.get(symbol).outputInfo()
           }
@@ -106,8 +110,14 @@ class RippleBot {
     screen.render()
   }
 
-  getCoinKeys () {
-    return Array.from(this.coins.keys())
+  getCoinKeys (sortBy) {
+    if (sortBy) {
+      return Array.from(this.coins.keys()).sort((a, b) => {
+        return Number(this.coins.get(a).state[sortBy]) - Number(this.coins.get(b).state[sortBy])
+      })
+    } else {
+      return Array.from(this.coins.keys())
+    }
   }
 
   updatePrices () {
@@ -167,8 +177,10 @@ class Coin {
 
   outputInfo () {
     return (
-      `
-        24 Hour high: 
+      `${this.state.symbol}
+          24 Hour high: ${this.state.highPrice}
+          24 Hour low: ${this.state.lowPrice}
+          Price Change %: ${this.state.priceChangePercent}
       `
     )
   }
