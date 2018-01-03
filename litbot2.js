@@ -52,11 +52,11 @@ class RippleBot {
 
     this.baseUnit = 'BTC'
     this.baseConversion = 'BTCUSDT'
-    this.baseCoin
+    this.baseCoin = null
 
-    this.get24hr()
-    setInterval(this.get24hr, 5000)
     this.initContrib()
+    this.get24hr()
+    setInterval(this.get24hr, 30000)
   }
 
   initContrib () {
@@ -70,10 +70,10 @@ class RippleBot {
   get24hr () {
     binance.prevDay(false, (allCoins, symbol) => {
       if (!this.firstGet) {
-        this.baseCoin = new Coin(allCoins[this.baseConversion])
+        this.baseCoin = new Coin(allCoins.find(coin => coin.symbol === this.baseConversion))
         allCoins.forEach(coinData => {
           if (coinData.symbol.substr(3) === this.baseUnit) {
-            this.coins.set(coinData.symbol, new Coin(coinData))
+            this.coins.set(coinData.symbol, new Coin(coinData, this.baseCoin))
           }
         })
         this.renderDashboard()
@@ -167,8 +167,9 @@ class RippleBot {
 }
 
 class Coin {
-  constructor (initialState) {
+  constructor (initialState, baseCoin) {
     this.state = initialState
+    this.baseCoin = baseCoin
   }
 
   setState (nextState) {
@@ -178,8 +179,9 @@ class Coin {
   outputInfo () {
     return (
       `${this.state.symbol}
-          24 Hour high: ${this.state.highPrice}
-          24 Hour low: ${this.state.lowPrice}
+          24 Hour high: ${(Number(this.state.highPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
+          24 Hour low: ${(Number(this.state.lowPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
+          Aprox USD Price: ${(Number(this.state.lastPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
           Price Change %: ${this.state.priceChangePercent}
       `
     )
