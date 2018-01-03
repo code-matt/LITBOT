@@ -24,18 +24,6 @@ if (!fs.existsSync('log.json')) {
 }
 require('events').EventEmitter.defaultMaxListeners = 300
 
-// import Coin from './classes/Coin'
-// import { setInterval } from 'timers';
-
-// const LITBOT_LOG_LENGTH = 4
-// const POLLING_INTERVAL = 1
-
-// const MARK_COUNT_SHORT = 10
-// const MARK_TIME_PERIOD_SHORT = 1
-
-// const MARK_COUNT_LONG = 8
-// const MARK_TIME_PERIOD_LONG = 15
-
 class RippleBot {
   constructor () {
     // this line below is a hack to force this node process to stay open until closed.
@@ -148,21 +136,6 @@ class RippleBot {
 
   sortWinnersAndLosers () {
 
-  }
-
-  calculateAndDraw () {
-    // this.calculateEMAShort().then(done => {
-    //   this.calculateEMALong().then(done => {
-    //     if (this.litbotLoading) {
-    //       this.renderLoading()
-    //     } else {
-    //       this.calculateROC()
-    //       this.buyHoldSellDecision().then(done => {
-    //         this.renderDashboard()
-    //       })
-    //     }
-    //   })
-    // })
   }
 }
 
