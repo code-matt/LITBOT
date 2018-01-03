@@ -96,7 +96,7 @@ class RippleBot {
   renderDashboard () {
     let vertRow = 0
     this.getCoinKeys('priceChangePercent').forEach((symbol, index) => {
-      if (index < 144) {
+      if (index < 36) {
         if (index && !(index % 12)) {
           vertRow += 2
         }
