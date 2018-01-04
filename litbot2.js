@@ -39,7 +39,6 @@ class RippleBot {
     this.renderDashboard = this.renderDashboard.bind(this)
     this.initContrib = this.initContrib.bind(this)
     this.getCoinKeys = this.getCoinKeys.bind(this)
-    this.renderHeader = this.renderHeader.bind(this)
     this.updateCandlesticks = this.updateCandlesticks.bind(this)
 
     this.baseUnit = 'BTC'
@@ -69,7 +68,6 @@ class RippleBot {
           }
         })
         this.sortWinnersAndLosers()
-        this.renderDashboard()
         this.firstGet = true
       } else {
         this.updateCoins(allCoins)
@@ -83,29 +81,13 @@ class RippleBot {
         this.coins.get(coinData.symbol).setState(coinData)
       }
     })
-    this.renderDashboard()
   }
 
   renderDashboard () {
-    let vertRow = 0
-    this.getCoinKeys('priceChangePercent').forEach((symbol, index) => {
-      if (index < 66) {
-        if (index && !(index % 12)) {
-          vertRow += 2
-        }
-        this.grid.set(vertRow, (index % 6) * 2, 2, 2, contrib.markdown,
-          {
-            markdown: this.coins.get(symbol).outputInfo()
-          }
-        )
-      }
+    this.losers.forEach((coin, index) => {
+      coin.draw(index)
     })
-    this.renderHeader()
     screen.render()
-  }
-
-  renderHeader () {
-
   }
 
   getCoinKeys (sortBy) {
@@ -121,11 +103,7 @@ class RippleBot {
   updatePrices () {
     try {
       binance.prices((ticker) => {
-        // this.tick += 1
-        // let time = Date.now()
         this.prices = ticker
-        // this.addPriceToPool(this.prices[this.symbol], time)
-        // resolve(true)
       })
     } catch (err) {
       console.log('GET PRICES HAS AN ERROR')
@@ -144,6 +122,7 @@ class RippleBot {
         close,
         volume
       })
+      this.renderDashboard()
     })
   }
 
@@ -160,7 +139,7 @@ class RippleBot {
   }
 
   sortWinnersAndLosers () {
-    this.losers = _.takeRight(this.getCoinKeys('priceChangePercent').map(symbol => this.coins.get(symbol)), 16)
+    this.losers = _.take(this.getCoinKeys('priceChangePercent').map(symbol => this.coins.get(symbol)), 12)
     this.updateCandlesticks()
   }
 }
@@ -170,8 +149,15 @@ class Coin {
     this.state = initialState
     this.grid = grid
     this.baseCoin = baseCoin
-    this.addCandlestick = this.addCandlestick.bind(this)
     this.candlesticks = []
+    this.init = false // every Coin needs to have its first ws candlesticks tick come in before we can start rendering.
+                      // Render a loading screen while that is taking place.. or a N/A graph ?
+
+    this.addCandlestick = this.addCandlestick.bind(this)
+    this.draw = this.draw.bind(this)
+    this.drawInfo = this.drawInfo.bind(this)
+    this.drawGraph = this.drawGraph.bind(this)
+    this.drawGraphNA = this.drawGraphNA.bind(this)
   }
 
   setState (nextState) {
@@ -180,22 +166,53 @@ class Coin {
 
   addCandlestick (candlestick) {
     this.candlesticks.push(candlestick)
+    if (this.candlesticks.length) {
+      this.init = true
+    }
   }
 
-  outputInfo () {
-    return (
+  draw (index) {
+    // if (index && !(index % 12)) {
+    //   vertRow += 2
+    // }
+    // (index % 6) * 2
+    let col = 0
+    let row = index * 2
+    if (index >= 6) {
+      col = 6
+      row = index % 6
+    }
+    this.drawInfo(row, col)
+    if (this.init) {
+      this.drawGraph(row, col)
+    } else {
+      this.drawGraphNA(row, col)
+    }
+  }
+
+  drawInfo (row, col) {
+    let info =
       `${this.state.symbol}
           24 Hour high: ${(Number(this.state.highPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
           24 Hour low: ${(Number(this.state.lowPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
           Aprox USD Price: ${(Number(this.state.lastPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
           Price Change %: ${this.state.priceChangePercent}
       `
+    this.grid.set(row, col, 2, 2, contrib.markdown,
+      {
+        markdown: info
+      }
     )
   }
 
-  outputCandlesticksGraph (x, y) {
+  drawGraph (row, col) {
     let candleSticksMapped = this.candlesticks.map(candlestick => Number(candlestick.close))
-    this.grid.set(y, x, 2, 5, contrib.line,
+    let data = {
+      title: 'Closing Price',
+      x: Array.apply(null, {length: candleSticksMapped.length}).map(Number.call, Number).map(String),
+      y: candleSticksMapped
+    }
+    this.grid.set(row, col + 2, 2, 4, contrib.line,
       {
         style: {
           line: 'yellow',
@@ -206,15 +223,36 @@ class Coin {
         xLabelPadding: 3,
         xPadding: 5,
         label: `${this.state.symbol} 1m candlesticks`,
-        minY: candleSticksMapped - 0.00000002,
-        maxY: candleSticksMapped + 0.00000002,
+        minY: _.minBy(candleSticksMapped) - 0.00000002,
+        maxY: _.maxBy(candleSticksMapped) + 0.00000002,
         numYLabels: 7,
-        data: candleSticksMapped,
+        data: data,
         showLegend: false,
         legend: {width: 20}
+      }
+    )
+  }
+
+  drawGraphNA (row, col) {
+    this.grid.set(row, col + 2, 2, 4, contrib.markdown,
+      {
+        markdown: `N/A. Candlestick data for this symbol has not come in yet.`
       }
     )
   }
 }
 
 new RippleBot()
+// let vertRow = 0
+// this.getCoinKeys('priceChangePercent').forEach((symbol, index) => {
+//   if (index < 66) {
+// if (index && !(index % 12)) {
+//   vertRow += 2
+// }
+//     this.grid.set(vertRow, (index % 6) * 2, 2, 2, contrib.markdown,
+//       {
+//         markdown: this.coins.get(symbol).outputInfo()
+//       }
+//     )
+//   }
+// })
