@@ -70,7 +70,7 @@ class RippleBot {
         this.sortWinnersAndLosers()
         this.firstGet = true
       } else {
-        this.updateCoins(allCoins)
+        _.throttle(() => this.updateCoins(allCoins), 1500)
       }
     })
   }
@@ -169,6 +169,9 @@ class Coin {
     if (this.candlesticks.length) {
       this.init = true
     }
+    if (this.candlesticks.length >= 60) {
+      this.candlesticks.shift()
+    }
   }
 
   draw (index) {
@@ -176,7 +179,7 @@ class Coin {
     let row = index * 2
     if (index >= 6) {
       col = 6
-      row = index % 6
+      row = (index % 6) * 2
     }
     this.drawInfo(row, col)
     if (this.init) {
