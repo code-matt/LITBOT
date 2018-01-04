@@ -30,6 +30,8 @@ class RippleBot {
     setInterval(() => {}, Number.POSITIVE_INFINITY)
     this.firstGet = false
     this.coins = new Map()
+    this.winners = []
+    this.losers = []
     this.sortWinnersAndLosers = this.sortWinnersAndLosers.bind(this)
     this.get24hr = this.get24hr.bind(this)
     this.updatePrices = this.updatePrices.bind(this)
@@ -37,6 +39,8 @@ class RippleBot {
     this.renderDashboard = this.renderDashboard.bind(this)
     this.initContrib = this.initContrib.bind(this)
     this.getCoinKeys = this.getCoinKeys.bind(this)
+    this.renderHeader = this.renderHeader.bind(this)
+    this.updateCandlesticks = this.updateCandlesticks.bind(this)
 
     this.baseUnit = 'BTC'
     this.baseConversion = 'BTCUSDT'
@@ -44,7 +48,7 @@ class RippleBot {
 
     this.initContrib()
     this.get24hr()
-    setInterval(this.get24hr, 30000)
+    // setInterval(this.get24hr, 30000)
   }
 
   initContrib () {
@@ -61,9 +65,10 @@ class RippleBot {
         this.baseCoin = new Coin(allCoins.find(coin => coin.symbol === this.baseConversion))
         allCoins.forEach(coinData => {
           if (coinData.symbol.substr(3) === this.baseUnit) {
-            this.coins.set(coinData.symbol, new Coin(coinData, this.baseCoin))
+            this.coins.set(coinData.symbol, new Coin(coinData, this.baseCoin, this.grid))
           }
         })
+        this.sortWinnersAndLosers()
         this.renderDashboard()
         this.firstGet = true
       } else {
@@ -95,7 +100,12 @@ class RippleBot {
         )
       }
     })
+    this.renderHeader()
     screen.render()
+  }
+
+  renderHeader () {
+
   }
 
   getCoinKeys (sortBy) {
@@ -122,6 +132,21 @@ class RippleBot {
     }
   }
 
+  updateCandlesticks () {
+    binance.websockets.candlesticks(this.losers.map(coin => coin.state.symbol), '1m', (candlesticks) => {
+      let { e: eventType, E: eventTime, s: symbol, k: ticks } = candlesticks
+      let { o: open, h: high, l: low, c: close, v: volume, n: trades, i: interval, x: isFinal, q: quoteVolume, V: buyVolume, Q: quoteBuyVolume } = ticks
+      this.coins.get(symbol).addCandlestick({
+        eventTime,
+        open,
+        high,
+        low,
+        close,
+        volume
+      })
+    })
+  }
+
   parseLog () {
     return new Promise((resolve, reject) => {
       fs.readFile('log.json', 'utf8', (err, data) => {
@@ -135,18 +160,26 @@ class RippleBot {
   }
 
   sortWinnersAndLosers () {
-
+    this.losers = _.takeRight(this.getCoinKeys('priceChangePercent').map(symbol => this.coins.get(symbol)), 16)
+    this.updateCandlesticks()
   }
 }
 
 class Coin {
-  constructor (initialState, baseCoin) {
+  constructor (initialState, baseCoin, grid) {
     this.state = initialState
+    this.grid = grid
     this.baseCoin = baseCoin
+    this.addCandlestick = this.addCandlestick.bind(this)
+    this.candlesticks = []
   }
 
   setState (nextState) {
     this.state = Object.assign(this.state, nextState)
+  }
+
+  addCandlestick (candlestick) {
+    this.candlesticks.push(candlestick)
   }
 
   outputInfo () {
@@ -157,6 +190,29 @@ class Coin {
           Aprox USD Price: ${(Number(this.state.lastPrice) * Number(this.baseCoin.state.lastPrice)).toFixed(2)}
           Price Change %: ${this.state.priceChangePercent}
       `
+    )
+  }
+
+  outputCandlesticksGraph (x, y) {
+    let candleSticksMapped = this.candlesticks.map(candlestick => Number(candlestick.close))
+    this.grid.set(y, x, 2, 5, contrib.line,
+      {
+        style: {
+          line: 'yellow',
+          text: 'green',
+          baseline: 'black'
+        },
+        yLength: 10,
+        xLabelPadding: 3,
+        xPadding: 5,
+        label: `${this.state.symbol} 1m candlesticks`,
+        minY: candleSticksMapped - 0.00000002,
+        maxY: candleSticksMapped + 0.00000002,
+        numYLabels: 7,
+        data: candleSticksMapped,
+        showLegend: false,
+        legend: {width: 20}
+      }
     )
   }
 }
