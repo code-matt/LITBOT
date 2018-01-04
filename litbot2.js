@@ -172,10 +172,6 @@ class Coin {
   }
 
   draw (index) {
-    // if (index && !(index % 12)) {
-    //   vertRow += 2
-    // }
-    // (index % 6) * 2
     let col = 0
     let row = index * 2
     if (index >= 6) {
@@ -243,16 +239,3 @@ class Coin {
 }
 
 new RippleBot()
-// let vertRow = 0
-// this.getCoinKeys('priceChangePercent').forEach((symbol, index) => {
-//   if (index < 66) {
-// if (index && !(index % 12)) {
-//   vertRow += 2
-// }
-//     this.grid.set(vertRow, (index % 6) * 2, 2, 2, contrib.markdown,
-//       {
-//         markdown: this.coins.get(symbol).outputInfo()
-//       }
-//     )
-//   }
-// })
