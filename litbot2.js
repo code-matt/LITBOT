@@ -47,6 +47,8 @@ class RippleBot {
 
     this.initContrib()
     this.get24hr()
+    this.renderDashboard()
+    setInterval(this.renderDashboard, 1000)
     // setInterval(this.get24hr, 30000)
   }
 
@@ -122,7 +124,6 @@ class RippleBot {
         close,
         volume
       })
-      this.renderDashboard()
     })
   }
 
