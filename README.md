@@ -17,6 +17,11 @@ BINANCE_PUBLIC_KEY=...
 BINANCE_SECRET_KEY=...
 ```
 
+To install:
+```
+npm install
+```
+
 To run:
 ```
 node litbot.js
