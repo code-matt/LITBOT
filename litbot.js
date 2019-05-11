@@ -28,9 +28,9 @@ const LITBOT_LOG_LENGTH = 4
 const POLLING_INTERVAL = 1
 
 const MARK_COUNT_SHORT = 10
-const MARK_TIME_PERIOD_SHORT = 1
+const MARK_TIME_PERIOD_SHORT = 3
 
-const MARK_COUNT_LONG = 8
+const MARK_COUNT_LONG = 5
 const MARK_TIME_PERIOD_LONG = 15
 
 class RippleBot {
@@ -510,13 +510,12 @@ class RippleBot {
 
   buyHoldSellDecision () {
     return new Promise(async (resolve, reject) => {
-      // if (this.averageROC >= 1 && this.averageROCLong > 5) {
-      if (this._coinBalance && (this.averageROCLong < -5)) {
+      if (this._coinBalance && (this.averageROC < -5)) {
         await this.doSell()
         resolve(true)
         return
       }
-      if (this._BTC && this.averageROCLong > 10) {
+      if (this._BTC && this.averageROCLong > 30) {
         await this.doBuy()
         resolve(true)
       } else {
