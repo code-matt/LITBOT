@@ -1,4 +1,4 @@
-DISCLAIMER: The fasts losing crypto bot out there!! :joy: I went down the rabbithole over two weekends and decided to try and make a crypto terminal dashboard and bot. I got the dashboard part, as far as LITBOT himself, well... :joy:
+DISCLAIMER: The fastest losing crypto bot out there!! :joy: I went down the rabbithole over two weekends and decided to try and make a crypto terminal dashboard and bot. I got the dashboard part, as far as LITBOT himself, well... :joy:
 
 First it gathers the data it needs to make its **expert** decicions. That data is constantly being updated and old data pushed out.
 
