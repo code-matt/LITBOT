@@ -72,7 +72,7 @@ class RippleBot {
 
     this.lastPriceTime = null
 
-    this.parseLog().then(log => {
+    this.parseLog().then(async log => {
       this.litbotLog = log
       this.marksShort = []
       this.marksLong = []
@@ -125,26 +125,25 @@ class RippleBot {
       screen.key(['tab'], (ch, key) => {
         console.log(this.selected.parent.name)
       })
-      this.updatePrices(true).then(done => {
-
-      })
+      await this.updatePrices(true)
       this.depth = {
         asks: [],
         buys: []
       }
-      this.getDepth()
+      await this.getDepth()
       setInterval(this.getDepth, 5000)
       setInterval(this.updatePrices, POLLING_INTERVAL * 1000)
-      this.updateCandlesticks()
+      await this.updateCandlesticks()
       setInterval(this.updateCandlesticks, 60000 * 5)
 
       this.prices = null
       this._coinBalance = 0 // start with 0 ripple.. bot decides when to make the first buy
-      this._BTC = 0.05 // start with 0.05 BTC
+      this._BTC = 0.5 // start with 0.05 BTC
 
       this.coins = ['POE', 'XRP', 'BNB', 'BRD', 'BTC']
-      this.updateBalances()
+      await this.updateBalances()
       setInterval(this.updateBalances, 120000)
+      this.calculateAndDraw()
     })
   }
 
@@ -172,30 +171,32 @@ class RippleBot {
     })
   }
 
-  calculateAndDraw () {
-    this.calculateEMAShort().then(done => {
-      this.calculateEMALong().then(done => {
-        if (this.litbotLoading) {
-          this.renderLoading()
-        } else {
-          this.calculateROC()
-          this.buyHoldSellDecision().then(done => {
-            this.renderDashboard()
-          })
-        }
+  async calculateAndDraw () {
+    if (this.litbotLoading) {
+      await this.renderLoading()
+    } else {
+      await this.calculateEMAShort()
+      await this.calculateEMALong()
+      await this.calculateROC()
+      await this.buyHoldSellDecision()
+      await this.renderDashboard()
+    }
+    setTimeout(() => {
+      this.calculateAndDraw()
+    }, 200)
+  }
+
+  renderLoading () {
+    return new Promise((resolve, reject) => {
+      this.grid.set(2, 4, 6, 6, contrib.picture, {
+        cols: 90,
+        file: './litbotlogo.png',
+        onReady: this.finishRenderLoading(resolve)
       })
     })
   }
 
-  renderLoading () {
-    this.grid.set(2, 4, 6, 6, contrib.picture, {
-      cols: 90,
-      file: './litbotlogo.png',
-      onReady: this.finishRenderLoading()
-    })
-  }
-
-  finishRenderLoading () {
+  finishRenderLoading (resolve) {
     this.grid.set(5, 0, 7, 12, contrib.donut,
       {
         label: '',
@@ -213,137 +214,141 @@ class RippleBot {
     })
 
     screen.render()
+    resolve(true)
   }
 
   renderDashboard () {
-    var data = [
-      {
-        title: 'Average Price',
-        x: Array.apply(null, {length: this.EMASHORT.length}).map(Number.call, Number).map(String),
-        y: this.marksShort
-      },
-      {
-        title: 'EMA SHORT',
-        y: this.EMASHORT.map(value => scale(value, _.min(this.EMASHORT), _.max(this.EMASHORT), _.minBy(this.marksShort), _.maxBy(this.marksShort))),
-        style: {
-          line: 'red'
+    return new Promise((resolve, reject) => {
+      var data = [
+        {
+          title: 'Average Price',
+          x: Array.apply(null, {length: this.EMASHORT.length}).map(Number.call, Number).map(String),
+          y: this.marksShort
+        },
+        {
+          title: 'EMA SHORT',
+          y: this.EMASHORT.map(value => scale(value, _.min(this.EMASHORT), _.max(this.EMASHORT), _.minBy(this.marksShort), _.maxBy(this.marksShort))),
+          style: {
+            line: 'red'
+          }
         }
-      }
-    ]
-
-    var data2 = [
-      {
-        title: 'EMA LONG',
-        x: Array.apply(null, {length: this.EMALONG.length}).map(Number.call, Number).map(String),
-        y: this.EMALONG,
-        style: {
-          line: 'red'
+      ]
+  
+      var data2 = [
+        {
+          title: 'EMA LONG',
+          x: Array.apply(null, {length: this.EMALONG.length}).map(Number.call, Number).map(String),
+          y: this.EMALONG,
+          style: {
+            line: 'red'
+          }
         }
-      }
-    ]
-
-    let pricePoolMapped = this.pricePool.map(priceObj => priceObj.price)
-    var data3 = [
-      {
-        title: 'Raw Price Data',
-        x: Array.apply(null, {length: pricePoolMapped.length}).map(Number.call, Number).map(String),
-        // y: pricePoolMapped.map(value => scale(value, _.min(pricePoolMapped), _.max(pricePoolMapped), _.minBy(pricePoolMapped), _.maxBy(pricePoolMapped)))
-        y: pricePoolMapped
-      }
-    ]
-
-    this.grid.set(6, 0, 6, 8, contrib.line,
-      {
-        style: {
-          line: 'yellow',
-          text: 'green',
-          baseline: 'black'
-        },
-        yLength: 10,
-        xLabelPadding: 3,
-        xPadding: 5,
-        label: `${this.symbol} Average Price / EMA. - Moving ${MARK_TIME_PERIOD_SHORT}s periods`,
-        minY: _.minBy(this.marksShort) - 0.00000002,
-        maxY: _.maxBy(this.marksShort) + 0.00000002,
-        numYLabels: 7,
-        data: data,
-        showLegend: false,
-        legend: {width: 20}
-      }
-    )
-    let depthMax = this.depth.asks >= this.depth.bids ? this.depth.asks : this.depth.bids
-    this.grid.set(6, 8, 6, 1, contrib.bar,
-      {
-        label: 'Market Depth',
-        barWidth: 4,
-        barSpacing: 6,
-        xOffset: 3,
-        maxHeight: 10,
-        data: {titles: ['Buys', 'Sells'], data: [scale(this.depth.asks, 0, depthMax, 0, 10), scale(this.depth.bids, 0, depthMax, 0, 10)]}
-      }
-    )
-    this.grid.set(8, 9, 4, 3, contrib.markdown,
-      {
-        markdown: this.reportWallet()
-      }
-    )
-
-    this.grid.set(0, 0, 6, 2, contrib.markdown,
-      {
-        markdown: this.reportProgress()
-      }
-    )
-    this.grid.set(0, 2, 3, 7, contrib.line,
-      {
-        style: {
-          line: 'yellow',
-          text: 'green',
-          baseline: 'black'
-        },
-        yLength: 10,
-        xLabelPadding: 3,
-        xPadding: 5,
-        label: `${this.symbol} LONG EMA. - Moving ${MARK_TIME_PERIOD_LONG}s periods`,
-        minY: _.minBy(this.EMALONG) - 0.00000023, // - 0.00000023
-        maxY: _.maxBy(this.EMALONG) + 0.00000023,
-        numYLabels: 7,
-        data: data2,
-        showLegend: false,
-        legend: {width: 20}
-      }
-    )
-
-    this.grid.set(3, 2, 3, 7, contrib.line,
-      {
-        style: {
-          line: 'yellow',
-          text: 'green',
-          baseline: 'black'
-        },
-        yLength: 10,
-        xLabelPadding: 3,
-        xPadding: 5,
-        label: `${this.symbol} Raw Price Data - Aprox ${POLLING_INTERVAL}s`,
-        minY: _.minBy(pricePoolMapped) - 0.00000023,
-        maxY: _.maxBy(pricePoolMapped) + 0.00000023,
-        numYLabels: 7,
-        data: data3,
-        showLegend: false,
-        legend: {width: 20}
-      }
-    )
-
-    this.grid.set(0, 9, 8, 3, contrib.markdown,
-      {
-        markdown: this.LITBOTLOG()
-      }
-    )
-
-    screen.key(['escape', 'q', 'C-c'], function (ch, key) {
-      return process.exit(0)
+      ]
+  
+      let pricePoolMapped = this.pricePool.map(priceObj => priceObj.price)
+      var data3 = [
+        {
+          title: 'Raw Price Data',
+          x: Array.apply(null, {length: pricePoolMapped.length}).map(Number.call, Number).map(String),
+          // y: pricePoolMapped.map(value => scale(value, _.min(pricePoolMapped), _.max(pricePoolMapped), _.minBy(pricePoolMapped), _.maxBy(pricePoolMapped)))
+          y: pricePoolMapped
+        }
+      ]
+  
+      this.grid.set(6, 0, 6, 8, contrib.line,
+        {
+          style: {
+            line: 'yellow',
+            text: 'green',
+            baseline: 'black'
+          },
+          yLength: 10,
+          xLabelPadding: 3,
+          xPadding: 5,
+          label: `${this.symbol} Average Price / EMA. - Moving ${MARK_TIME_PERIOD_SHORT}s periods`,
+          minY: _.minBy(this.marksShort) - 0.00000002,
+          maxY: _.maxBy(this.marksShort) + 0.00000002,
+          numYLabels: 7,
+          data: data,
+          showLegend: false,
+          legend: {width: 20}
+        }
+      )
+      let depthMax = this.depth.asks >= this.depth.bids ? this.depth.asks : this.depth.bids
+      this.grid.set(6, 8, 6, 1, contrib.bar,
+        {
+          label: 'Market Depth',
+          barWidth: 4,
+          barSpacing: 6,
+          xOffset: 3,
+          maxHeight: 10,
+          data: {titles: ['Buys', 'Sells'], data: [scale(this.depth.asks, 0, depthMax, 0, 10), scale(this.depth.bids, 0, depthMax, 0, 10)]}
+        }
+      )
+      this.grid.set(8, 9, 4, 3, contrib.markdown,
+        {
+          markdown: this.reportWallet()
+        }
+      )
+  
+      this.grid.set(0, 0, 6, 2, contrib.markdown,
+        {
+          markdown: this.reportProgress()
+        }
+      )
+      this.grid.set(0, 2, 3, 7, contrib.line,
+        {
+          style: {
+            line: 'yellow',
+            text: 'green',
+            baseline: 'black'
+          },
+          yLength: 10,
+          xLabelPadding: 3,
+          xPadding: 5,
+          label: `${this.symbol} LONG EMA. - Moving ${MARK_TIME_PERIOD_LONG}s periods`,
+          minY: _.minBy(this.EMALONG) - 0.00000023, // - 0.00000023
+          maxY: _.maxBy(this.EMALONG) + 0.00000023,
+          numYLabels: 7,
+          data: data2,
+          showLegend: false,
+          legend: {width: 20}
+        }
+      )
+  
+      this.grid.set(3, 2, 3, 7, contrib.line,
+        {
+          style: {
+            line: 'yellow',
+            text: 'green',
+            baseline: 'black'
+          },
+          yLength: 10,
+          xLabelPadding: 3,
+          xPadding: 5,
+          label: `${this.symbol} Raw Price Data - Aprox ${POLLING_INTERVAL}s`,
+          minY: _.minBy(pricePoolMapped) - 0.00000023,
+          maxY: _.maxBy(pricePoolMapped) + 0.00000023,
+          numYLabels: 7,
+          data: data3,
+          showLegend: false,
+          legend: {width: 20}
+        }
+      )
+  
+      this.grid.set(0, 9, 8, 3, contrib.markdown,
+        {
+          markdown: this.LITBOTLOG()
+        }
+      )
+  
+      screen.key(['escape', 'q', 'C-c'], function (ch, key) {
+        return process.exit(0)
+      })
+  
+      screen.render()
+      resolve(true)
     })
-
-    screen.render()
   }
 
   LITBOTLOG () {
@@ -437,7 +442,7 @@ class RippleBot {
       this.grid = new contrib.grid({rows: 12, cols: 12, screen: screen})
       this.litbotLoading = false
     }
-    this.calculateAndDraw()
+    // this.calculateAndDraw()
   }
 
   calculateEMAShort () {
@@ -465,84 +470,100 @@ class RippleBot {
   }
 
   calculateROC () {
-    let changes = []
-    this.EMASHORT.forEach((mark, index) => {
-      if (index !== 0) {
-        let time = (index + 1) * POLLING_INTERVAL
-        let prevTime = (index) * POLLING_INTERVAL
-        changes.push(100000000 / ((time - prevTime) / (mark - this.EMASHORT[index - 1])))
-      }
-    })
-    this.changes = changes
-    this.averageROC = (this.changes.reduce((a, b) => a + b, 0) / this.EMASHORT.length).toFixed(3)
-
-    changes = []
-    this.EMALONG.forEach((mark, index) => {
-      if (index !== 0) {
-        let time = (index + 1) * POLLING_INTERVAL
-        let prevTime = (index) * POLLING_INTERVAL
-        changes.push(100000000 / ((time - prevTime) / (mark - this.EMALONG[index - 1])))
-      }
-    })
-    this.changes = changes
-    this.averageROCLong = (this.changes.reduce((a, b) => a + b, 0) / this.EMALONG.length).toFixed(3)
-  }
-
-  updateCandlesticks () {
-    binance.prevDay(this.symbol, (prevDay, symbol) => {
-      this.ranges['24h'] = {
-        low: Number(prevDay.lowPrice),
-        high: Number(prevDay.highPrice)
-      }
-      this.calculateAndDraw()
-    })
-  }
-
-  buyHoldSellDecision () {
-    return new Promise((resolve, reject) => {
-      if (this.averageROC >= 0.2 && this.averageROCLong > 1.5) {
-        if (this._BTC) {
-          this.doBuy()
+    return new Promise ((resolve, reject) => {
+      let changes = []
+      this.EMASHORT.forEach((mark, index) => {
+        if (index !== 0) {
+          let time = (index + 1) * POLLING_INTERVAL
+          let prevTime = (index) * POLLING_INTERVAL
+          changes.push(100000000 / ((time - prevTime) / (mark - this.EMASHORT[index - 1])))
         }
-      } else {
-        if (this._coinBalance && (this.averageROC < 0 || this.averageROCLong < 1)) {
-          this.doSell()
+      })
+      this.changes = changes
+      this.averageROC = (this.changes.reduce((a, b) => a + b, 0) / this.EMASHORT.length).toFixed(3)
+  
+      changes = []
+      this.EMALONG.forEach((mark, index) => {
+        if (index !== 0) {
+          let time = (index + 1) * POLLING_INTERVAL
+          let prevTime = (index) * POLLING_INTERVAL
+          changes.push(100000000 / ((time - prevTime) / (mark - this.EMALONG[index - 1])))
         }
-      }
+      })
+      this.changes = changes
+      this.averageROCLong = (this.changes.reduce((a, b) => a + b, 0) / this.EMALONG.length).toFixed(3)
       resolve(true)
     })
   }
 
+  updateCandlesticks () {
+    return new Promise((resolve, reject) => {
+      binance.prevDay(this.symbol, (prevDay, symbol) => {
+        this.ranges['24h'] = {
+          low: Number(prevDay.lowPrice),
+          high: Number(prevDay.highPrice)
+        }
+      })
+      resolve(true)
+    })
+  }
+
+  buyHoldSellDecision () {
+    return new Promise(async (resolve, reject) => {
+      // if (this.averageROC >= 1 && this.averageROCLong > 5) {
+      if (this._coinBalance && (this.averageROCLong < -5)) {
+        await this.doSell()
+        resolve(true)
+        return
+      }
+      if (this._BTC && this.averageROCLong > 10) {
+        await this.doBuy()
+        resolve(true)
+      } else {
+        resolve(true)
+      }
+    })
+  }
+
   doBuy () {
-    this.ROCBoughtAt = this.averageROC
-    this.buyPrice = this.prices[this.symbol]
-    this._coinBalance = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices[this.symbol])
-    this._BTC = 0
-    this.litbotLog.push(`
-     LITBOT is buying:
-     ROCBoughtAt: ${this.ROCBoughtAt}
-     ${this.symbol} Price: ${this.prices[this.symbol]}
-     `)
-    this.writeLog()
+    return new Promise((resolve, reject) => {
+      this.ROCBoughtAt = this.averageROC
+      this.buyPrice = this.prices[this.symbol]
+      this._coinBalance = (this._BTC * this.prices.BTCUSDT) / (this.prices.BTCUSDT * this.prices[this.symbol])
+      this._BTC = 0
+      this.litbotLog.push(`
+       LITBOT is buying:
+       ROCBoughtAt: ${this.ROCBoughtAt}
+       ${this.symbol} Price: ${this.prices[this.symbol]}
+       `)
+      this.writeLog()
+      resolve(true)
+    })
   }
 
   doSell () {
-    let profit = (this.prices[this.symbol] - this.buyPrice).toFixed(8)
-    this.buyPrice = null
-    this._BTC = (this._coinBalance * (this.prices.BTCUSDT * this.prices[this.symbol])) / this.prices.BTCUSDT
-    this._coinBalance = 0
-    this.litbotLog.push(`
-     LITBOT is selling:
-     ROCSoldAt: ${this.averageROC}
-     ${this.symbol} Price: ${this.prices[this.symbol]}
-     ${this.symbol} gain/loss: ${profit}
-     `)
-    this.writeLog()
+    return new Promise((resolve, reject) => {
+      let profit = (this.prices[this.symbol] - this.buyPrice).toFixed(8)
+      this.buyPrice = null
+      this._BTC = (this._coinBalance * (this.prices.BTCUSDT * this.prices[this.symbol])) / this.prices.BTCUSDT
+      this._coinBalance = 0
+      this.litbotLog.push(`
+       LITBOT is selling:
+       ROCSoldAt: ${this.averageROC}
+       ${this.symbol} Price: ${this.prices[this.symbol]}
+       ${this.symbol} gain/loss: ${profit}
+       `)
+      this.writeLog()
+      resolve(true)
+    })
   }
 
   updateBalances () {
-    binance.balance(balances => {
-      this.balances = balances
+    return new Promise((resolve, reject) => {
+      binance.balance(balances => {
+        this.balances = balances
+        resolve(true)
+      })
     })
   }
 
@@ -554,7 +575,7 @@ class RippleBot {
     }
     return (`
       LITBOT REPORT:
-      (Started with 0.05 BTC)
+      (Started with 0.5 BTC)
         ${this.prettyName}: ${this._coinBalance}
         BTC: ${this._BTC}
       ${BTCmessage}
@@ -610,26 +631,16 @@ class RippleBot {
 
   calcMyXRPBalanceAndValue () {
     return new Promise((resolve, reject) => {
-      let thingsToDo = 2
       let XRPUSDT, XRPETH, ETHUSDT, XRPPrice, XRPBalance
 
       binance.prices((ticker) => {
         ETHUSDT = ticker.ETHUSDT
         XRPETH = ticker.XRPETH
-        console.log('Price of Ripple - Ethereum: ', XRPETH)
-        console.log('Etherium price - USDT: ', ETHUSDT)
-        thingsToDo -= 1
         binance.balance((balances) => {
           XRPBalance = balances.XRP.available
           XRPPrice = ETHUSDT * XRPETH
           XRPUSDT = XRPBalance * XRPPrice
-          console.log('XRP balance: ', XRPBalance)
-          console.log('XRP (aprox) USD value: ', XRPPrice)
-          console.log('Your XRP (aprox) USD value: ', XRPUSDT)
-          thingsToDo -= 1
-          if (!thingsToDo) {
-            resolve(true)
-          }
+          resolve(true)
         })
       })
     })
