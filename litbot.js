@@ -4,6 +4,8 @@ console.log('TALib Version: ' + talib.version)
 const binance = require('node-binance-api')
 var _ = require('lodash')
 require('./modified_modules/lodash-math')(_)
+// import { Network } from 'neataptic'
+var Network = require('neataptic').Network
 
 var blessed = require('blessed')
 var contrib = require('./modified_modules/blessed-contrib')
@@ -35,6 +37,17 @@ const MARK_TIME_PERIOD_LONG = 15
 
 class RippleBot {
   constructor () {
+    // ML!
+    this.network = new Network(2,1)
+    this.trainingSet = [
+      { input: [0,0], output: [0] },
+      { input: [0,1], output: [1] },
+      { input: [1,0], output: [1] },
+      { input: [1,1], output: [0] }
+    ]
+
+
+
     // this line below is a hack to force this node process to stay open until closed.
     setInterval(() => {}, Number.POSITIVE_INFINITY)
 
@@ -60,6 +73,7 @@ class RippleBot {
     this.getDepth = this.getDepth.bind(this)
     this.getTimePeriod = this.getTimePeriod.bind(this)
     this.calculateEMALong = this.calculateEMALong.bind(this)
+    this.evolveNetwork = this.evolveNetwork.bind(this)
 
     this.parseLog = this.parseLog.bind(this)
     this.writeLog = this.writeLog.bind(this)
@@ -146,6 +160,13 @@ class RippleBot {
       this.calculateAndDraw()
     })
   }
+  
+  evolveNetwork () {
+    return new Promise(async (resolve, reject) => {
+      await this.network.evolve()
+      resolve(true)
+    })
+  }
 
   parseLog () {
     return new Promise((resolve, reject) => {
@@ -178,6 +199,7 @@ class RippleBot {
       await this.calculateEMAShort()
       await this.calculateEMALong()
       await this.calculateROC()
+      await this.evolveNetwork()
       await this.buyHoldSellDecision()
       await this.renderDashboard()
     }
